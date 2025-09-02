@@ -1,0 +1,20 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+logs/
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Compiled files
+dist/
+build/
+
+# Optional: Ignore your models if you don’t want them in git
+models/
