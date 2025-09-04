@@ -16,5 +16,4 @@ Thumbs.db
 dist/
 build/
 
-# Optional: Ignore your models if you don’t want them in git
-models/
+
