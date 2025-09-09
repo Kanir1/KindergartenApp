@@ -1,25 +1,36 @@
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const DailyLogSchema = new mongoose.Schema({
-  date: String,
+const DailyLogSchema = new Schema({
+  date: { type: String, required: true },
   meals: {
-    breakfast: String,
-    lunch: String,
-    snack: String
+    breakfast: { type: String },
+    lunch: { type: String },
+    snack: { type: String }
   },
-  sleepHours: Number,
-  hydration: Boolean,
-  photos: [String],
-  notes: String
+  sleepHours: { type: Number },
+  hydration: { type: Boolean },
+  photos: [{ type: String }],
+  notes: { type: String }
 });
 
-const ChildSchema = new mongoose.Schema({
-  name: String,
-  parentId: mongoose.Schema.Types.ObjectId,
-  dailyLogs: [DailyLogSchema],
-  requiredItems: [String],
-  monthlyUpdate: String,
-  customRemarks: String
-});
+const ChildSchema = new Schema(
+  {
+    name: { type: String, required: true },
+
+    parentId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+      default: null
+    },
+
+    dailyLogs: [DailyLogSchema],
+    requiredItems: [{ type: String }],
+    monthlyUpdate: { type: String },
+    customRemarks: { type: String }
+  },
+  { timestamps: true }
+);
 
 module.exports = mongoose.model('Child', ChildSchema);
