@@ -1,80 +1,69 @@
-import { useState } from 'react';
+// src/App.jsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from './auth/AuthProvider.jsx';
 
-function App() {
-  const [form, setForm] = useState({
-    childId: '',
-    date: '',
-    breakfast: '',
-    lunch: '',
-    snack: '',
-    sleepHours: '',
-    hydration: false,
-    photos: '',
-    notes: ''
-  });
+import NavBar from './components/NavBar.jsx';
+import Protected from './components/Protected.jsx';
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setForm(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
+import Login from './pages/Login.jsx';
+import AdminDashBoard from './pages/AdminDashBoard.jsx';     // matches your filename
+import ParentDashBoard from './pages/ParentDashBoard.jsx';   // matches your filename
+import CreateReport from './pages/CreateReport.jsx';
+import Register from './pages/Register.jsx';
+import ReportsList from './pages/ReportsLists.jsx';
 
-  const handleSubmit = async (e) => {
-  e.preventDefault();
-  const logData = {
-    date: form.date,
-    meals: {
-      breakfast: form.breakfast,
-      lunch: form.lunch,
-      snack: form.snack
-    },
-    sleepHours: parseFloat(form.sleepHours),
-    hydration: form.hydration,
-    photos: form.photos.split(',').map(p => p.trim()),
-    notes: form.notes
-  };
+const qc = new QueryClient();
 
-  console.log("Submitting log:", logData);
-
-  try {
-    const response = await fetch(`http://localhost:5000/api/children/${form.childId}/log`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(logData)
-    });
-
-    const result = await response.text();
-    console.log("Server response:", result);
-    alert(result);
-  } catch (err) {
-    console.error("Fetch error:", err);
-    alert("Error submitting log");
-  }
-};
-
-
+export default function App() {
   return (
-    <div style={{ padding: '2rem' }}>
-      <h1>Daily Log Entry</h1>
-      <form onSubmit={handleSubmit}>
-        <input name="childId" placeholder="Child ID" onChange={handleChange} required /><br />
-        <input name="date" type="date" onChange={handleChange} required /><br />
-        <input name="breakfast" placeholder="Breakfast" onChange={handleChange} /><br />
-        <input name="lunch" placeholder="Lunch" onChange={handleChange} /><br />
-        <input name="snack" placeholder="Snack" onChange={handleChange} /><br />
-        <input name="sleepHours" placeholder="Sleep (hrs)" onChange={handleChange} /><br />
-        <label>
-          <input type="checkbox" name="hydration" onChange={handleChange} />
-          Hydration OK
-        </label><br />
-        <input name="photos" placeholder="Photo filenames (comma-separated)" onChange={handleChange} /><br />
-        <textarea name="notes" placeholder="Notes" onChange={handleChange}></textarea><br />
-        <button type="submit">Submit Log</button>
-      </form>
-    </div>
+    <QueryClientProvider client={qc}>
+      <AuthProvider>
+        <BrowserRouter>
+          <NavBar />
+          <Routes>
+            <Route path="/" element={<div className="p-4">Welcome to KindergartenApp</div>} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            <Route
+              path="/admin"
+              element={
+                <Protected role="admin">
+                  <AdminDashBoard />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/parent"
+              element={
+                <Protected role="parent">
+                  <ParentDashBoard />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/reports/new"
+              element={
+                <Protected role="admin">
+                  <CreateReport />
+                </Protected>
+              }
+            />
+            <Route
+            path="/reports"
+            element={
+              // both roles can view their allowed reports
+              <Protected>
+                <ReportsList />
+              </Protected>
+            }
+          />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
-
-export default App;

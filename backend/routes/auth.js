@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 const User = require('../models/User');
-const Child = require('../models/child'); // <-- make sure this path is correct
+const Child = require('../models/child'); // path is correct
 
 const router = express.Router();
 
@@ -13,56 +13,138 @@ const isObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role = 'parent', childIds = [] } = req.body;
+    const {
+      name,
+      email,
+      password,
+      role = 'parent',
+      childIds = [],
+      newChild, // { name: string, externalId: string, birthDate?: string }
+    } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email & password required' });
+    }
+
+    // Enforce unique email
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ message: 'Email already registered' });
+    }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, passwordHash, role });
 
-    if (role === 'parent' && Array.isArray(childIds) && childIds.length > 0) {
-      const validIds = childIds.filter(isObjectId);
-      if (validIds.length !== childIds.length) {
-        return res.status(400).json({ message: 'One or more childIds are invalid ObjectIds' });
+    // Parent-specific: link or create children
+    if (user.role === 'parent') {
+      // 1) Link existing children by Mongo IDs (only if not linked yet)
+      if (Array.isArray(childIds) && childIds.length) {
+        const validIds = childIds.filter(isObjectId);
+        if (validIds.length !== childIds.length) {
+          return res
+            .status(400)
+            .json({ message: 'One or more childIds are invalid ObjectIds' });
+        }
+
+        const objIds = validIds.map((id) => new mongoose.Types.ObjectId(id));
+        const result = await Child.updateMany(
+          {
+            _id: { $in: objIds },
+            $or: [{ parentId: null }, { parentId: { $exists: false } }],
+          },
+          { $set: { parentId: user._id } }
+        );
+        // Optional for debugging/telemetry
+        user._linkStats = {
+          matched: result.matchedCount ?? result.n,
+          modified: result.modifiedCount ?? result.nModified,
+        };
       }
 
-      const objIds = validIds.map(id => new mongoose.Types.ObjectId(id));
-      const result = await Child.updateMany(
-        { _id: { $in: objIds } },
-        { $set: { parentId: user._id } }
-      );
+      // 2) Create or link by human-friendly externalId
+      if (newChild && typeof newChild === 'object') {
+        const ext = (newChild.externalId || '').trim().toUpperCase();
+        const childName = (newChild.name || '').trim();
 
-      // Optional: surface counts to make debugging easy
-      // e.g., { matchedCount: 1, modifiedCount: 1 }
-      user._linkStats = { matched: result.matchedCount ?? result.n, modified: result.modifiedCount ?? result.nModified };
+        if (!ext || !childName) {
+          return res
+            .status(400)
+            .json({ message: 'newChild.externalId and newChild.name are required' });
+        }
+
+        let kid = await Child.findOne({ externalId: ext });
+
+        if (kid) {
+          // If already linked to someone else → reject
+          if (kid.parentId && String(kid.parentId) !== String(user._id)) {
+            return res
+              .status(409)
+              .json({ message: 'Child ID is already linked to another parent' });
+          }
+          // Link to this parent; keep existing name unless it’s empty
+          kid.parentId = user._id;
+          if (!kid.name) kid.name = childName;
+          await kid.save();
+        } else {
+          // Create new child for this parent
+          kid = await Child.create({
+            name: childName,
+            externalId: ext,
+            parentId: user._id,
+            birthDate: newChild.birthDate || null,
+          });
+        }
+      }
     }
 
-    res.status(201).json({ id: user._id, email: user.email, role: user.role, linkStats: user._linkStats });
+    // Derive children list for token from Child.parentId
+    const kids = await Child.find({ parentId: user._id }).select('_id').lean();
+    const childIdsForToken = kids.map((k) => String(k._id));
+
+    const payload = { id: user._id, role: user.role, children: childIdsForToken };
+    const token = jwt.sign(
+      payload,
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
+    );
+
+    return res.status(201).json({
+      token,
+      user: { id: user._id, email: user.email, role: user.role, children: childIdsForToken },
+      linkStats: user._linkStats,
+    });
   } catch (e) {
-    res.status(400).json({ message: e.message });
+    console.error(e);
+    return res.status(400).json({ message: e.message || 'Registration failed' });
   }
 });
-
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
+
+  // passwordHash might be select:false in the schema; explicitly include it
   const user = await User.findOne({ email }).select('+passwordHash role email');
   if (!user) return res.status(401).json({ message: 'Invalid credentials' });
 
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
 
-  // ⬇️ derive children from Child.parentId (not from user.children)
+  // Derive children from Child.parentId (not embedded in User)
   let childIds = [];
   if (user.role === 'parent') {
     const kids = await Child.find({ parentId: user._id }).select('_id').lean();
-    childIds = kids.map(k => String(k._id));
+    childIds = kids.map((k) => String(k._id));
   }
 
   const payload = { id: user._id, role: user.role, children: childIds };
-  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1d' });
+  const token = jwt.sign(
+    payload,
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
+  );
 
   res.json({ token, user: { id: user._id, email: user.email, role: user.role, children: childIds } });
 });
-
 
 module.exports = router;

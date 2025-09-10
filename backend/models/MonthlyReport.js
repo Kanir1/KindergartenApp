@@ -9,6 +9,7 @@ const MonthlyReportSchema = new Schema({
   mealsOverview: String,
   sleepOverview: String,
   hydrationOverview: String,
+  notes: { type: String, maxlength: 4000, default: '' },
 }, { timestamps: true });
 
 MonthlyReportSchema.index({ child: 1, month: 1 }, { unique: true });

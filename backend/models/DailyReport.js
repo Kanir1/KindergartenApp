@@ -14,6 +14,8 @@ const DailyReportSchema = new Schema({
   },
   hydration: { status: { type: String, enum: ['yes','no'] }, cups: Number },
 
+  notes: { type: String, maxlength: 2000, default: '' },
+
   sleep: {
     start: Date,
     end: Date,

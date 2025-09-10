@@ -16,7 +16,13 @@ const DailyLogSchema = new Schema({
 
 const ChildSchema = new Schema(
   {
-    name: { type: String, required: true },
+    name: { type: String, required: true, trim: true },
+
+    // NEW: human-friendly ID parents can type at signup (case-insensitive)
+    externalId: { type: String, trim: true, index: { unique: true, sparse: true } },
+
+    // Optional: store birth date if you want (can be omitted if not needed)
+    birthDate: { type: Date, default: null },
 
     parentId: {
       type: Schema.Types.ObjectId,
@@ -32,5 +38,14 @@ const ChildSchema = new Schema(
   },
   { timestamps: true }
 );
+
+// Normalize externalId so ABC123 and abc123 are treated the same
+ChildSchema.pre('save', function (next) {
+  if (this.externalId) this.externalId = this.externalId.trim().toUpperCase();
+  next();
+});
+
+// Ensure uniqueness only when externalId exists
+ChildSchema.index({ externalId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Child', ChildSchema);
