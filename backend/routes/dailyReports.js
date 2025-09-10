@@ -1,7 +1,7 @@
-// routes/dailyReports.js
 const express = require('express');
 const router = express.Router();
 const DailyReport = require('../models/DailyReport');
+const Child = require('../models/child');
 const { requireAuth, requireRole, ensureCanAccessChild } = require('../middleware/auth');
 
 // Create pre-sleep report (admin only)
@@ -13,10 +13,6 @@ router.post(
   async (req, res) => {
     try {
       const { child, date, meals, hydration, photos = [], notes = '' } = req.body;
-
-      // Optional pre-check (uncomment if you prefer avoiding throw)
-      // const exists = await DailyReport.exists({ child, date, type: 'preSleep' });
-      // if (exists) return res.status(409).json({ message: 'A report for this child, date, and type already exists.' });
 
       const doc = await DailyReport.create({
         child,
@@ -50,10 +46,6 @@ router.post(
     try {
       const { child, date, meals, hydration, sleep, photos = [], notes = '' } = req.body;
 
-      // Optional pre-check
-      // const exists = await DailyReport.exists({ child, date, type: 'postSleep' });
-      // if (exists) return res.status(409).json({ message: 'A report for this child, date, and type already exists.' });
-
       const doc = await DailyReport.create({
         child,
         date,
@@ -78,70 +70,82 @@ router.post(
 );
 
 // List reports (admin/parent)
-// Parents can fetch ALL their children’s reports without specifying ?child=,
-// or they can filter to a single child they own. Admin can filter any child.
+// Parents: either all their kids, or filter by ?child= if it's theirs.
+// Admin: optional ?child= to filter any child.
 router.get('/', requireAuth, requireRole('admin', 'parent'), async (req, res) => {
-  const { child, from, to, type, page = '1', limit = '20' } = req.query;
-  const q = {};
+  try {
+    const { child, from, to, type, page = '1', limit = '20' } = req.query;
+    const q = {};
 
-  if (req.user.role === 'parent') {
-    const myKids = (req.user.children || []).map(String);
-    if (child) {
-      if (!myKids.includes(String(child))) {
-        return res.status(403).json({ message: 'Forbidden: not your child' });
-      }
-      q.child = child;
-    } else {
-      q.child = { $in: myKids };
+    // Normalize type
+    if (type) {
+      q.type = type === 'pre' ? 'preSleep' : type === 'post' ? 'postSleep' : type;
     }
-  } else if (child) {
-    q.child = child; // admin filter
+
+    // Date range
+    if (from || to) q.date = { ...(from && { $gte: from }), ...(to && { $lte: to }) };
+
+    if (req.user.role === 'admin') {
+      if (child) q.child = child;
+    } else {
+      // Parent: compute the list of their child IDs via DB, not JWT
+      const userId = req.user.id;
+      const myChildIds = await Child.find({
+        $or: [{ parents: userId }, { parent: userId }, { parentId: userId }],
+      }).distinct('_id');
+
+      if (child) {
+        // Only allow if the requested child is theirs
+        const ok = myChildIds.map(String).includes(String(child));
+        if (!ok) return res.status(403).json({ message: 'Forbidden: not your child' });
+        q.child = child;
+      } else {
+        q.child = { $in: myChildIds };
+      }
+    }
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+
+    const docs = await DailyReport.find(q)
+      .populate('child', 'name birthDate externalId')
+      .sort({ date: -1, type: 1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean();
+
+    return res.json(docs);
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
   }
-
-  if (type) {
-    // Allow both 'preSleep'/'postSleep' and shorthand 'pre'/'post'
-    let t = type;
-    if (type === 'pre') t = 'preSleep';
-    if (type === 'post') t = 'postSleep';
-    q.type = t;
-  }
-
-  if (from || to) q.date = { ...(from && { $gte: from }), ...(to && { $lte: to }) };
-
-  const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-  const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
-
-  const docs = await DailyReport.find(q)
-    .populate('child', 'name birthDate externalId')
-    .sort({ date: -1, type: 1 })
-    .skip((pageNum - 1) * limitNum)
-    .limit(limitNum);
-
-  res.json(docs);
 });
 
-// Get by id (parent/admin) with per-child access check
+// Get by id (parent/admin) with per-child access check against DB
 router.get('/:id', requireAuth, requireRole('admin', 'parent'), async (req, res) => {
   try {
     const doc = await DailyReport.findById(req.params.id)
-      .populate('child', 'name birthDate externalId');
+      .populate('child', 'name birthDate externalId')
+      .lean();
     if (!doc) return res.status(404).json({ message: 'Not found' });
 
-    // If parent, ensure they own this child
-    if (req.user.role === 'parent') {
-      const childId = String(doc.child?._id || doc.child);
-      const owns = (req.user.children || []).map(String).includes(childId);
-      if (!owns) return res.status(403).json({ message: 'Forbidden: not your child' });
-    }
+    if (req.user.role === 'admin') return res.json(doc);
+
+    // Parent: ensure the report's child belongs to them (supports parent/parentId/parents)
+    const userId = req.user.id;
+    const childId = String(doc.child?._id || doc.child);
+    const owns = await Child.exists({
+      _id: childId,
+      $or: [{ parents: userId }, { parent: userId }, { parentId: userId }],
+    });
+    if (!owns) return res.status(403).json({ message: 'Forbidden: not your child' });
 
     return res.json(doc);
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ message: e.message || 'Server error' });
+    return res.status(500).json({ message: e.message });
   }
 });
 
-// Update (admin only) – also handles duplicate collisions
+// Update (admin only)
 router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const existing = await DailyReport.findById(req.params.id);
@@ -161,9 +165,13 @@ router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
 
 // Delete (admin only)
 router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
-  const doc = await DailyReport.findByIdAndDelete(req.params.id);
-  if (!doc) return res.status(404).json({ message: 'Not found' });
-  res.json({ ok: true });
+  try {
+    const doc = await DailyReport.findByIdAndDelete(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
 });
 
 module.exports = router;

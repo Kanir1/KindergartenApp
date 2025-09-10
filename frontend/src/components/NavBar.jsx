@@ -1,4 +1,3 @@
-// src/components/NavBar.jsx
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 
@@ -15,10 +14,22 @@ export default function NavBar() {
   return (
     <div className="px-4 py-2 border-b flex items-center gap-4">
       <Link to="/">Home</Link>
+
+      {/* Admin-only tab */}
       {user?.role === 'admin' && <Link to="/admin">Admin</Link>}
-      {user?.role === 'parent' && <Link to="/parent">Parent</Link>}
+
+      {/* Authenticated users (admin or parent) */}
       {user && <Link to="/reports">Reports</Link>}
-      {user?.role === 'parent' && <Link to="/link-child">Link Child</Link>}
+
+      {/* Parent-only tab */}
+      {user?.role === 'parent' && (
+        <Link
+          to="/my-children"
+          className="rounded-xl px-3 py-2 text-sm font-medium hover:bg-slate-100"
+        >
+          My Children
+        </Link>
+      )}
 
       <div className="ml-auto flex items-center gap-3">
         {!user ? (

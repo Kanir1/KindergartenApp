@@ -1,4 +1,3 @@
-// src/App.jsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './auth/AuthProvider.jsx';
@@ -7,15 +6,15 @@ import NavBar from './components/NavBar.jsx';
 import Protected from './components/Protected.jsx';
 
 import Login from './pages/Login.jsx';
-import AdminDashBoard from './pages/AdminDashBoard.jsx';     // matches your filename
-import ParentDashBoard from './pages/ParentDashBoard.jsx';   // matches your filename
+import AdminDashBoard from './pages/AdminDashBoard.jsx';
 import CreateReport from './pages/CreateReport.jsx';
 import Register from './pages/Register.jsx';
-import ReportsList from './pages/ReportsLists.jsx';           // <- singular filename
+import ReportsList from './pages/ReportsLists.jsx'; // keep your current path
 import ReportDetails from './pages/ReportDetails.jsx';
 import EditReport from './pages/EditReport.jsx';
-import LinkChild from './pages/LinkChild.jsx';
 import CreateMonthly from './pages/CreateMonthly.jsx';
+import MyChildren from './pages/MyChildren';
+import NewChildForParent from './pages/NewChildForParent';
 
 const qc = new QueryClient();
 
@@ -30,6 +29,25 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
 
+            {/* Parent-only: My Children */}
+            <Route
+              path="/my-children"
+              element={
+                <Protected role="parent">
+                  <MyChildren />
+                </Protected>
+              }
+            />
+            <Route
+              path="/my-children/new"
+              element={
+                <Protected role="parent">
+                  <NewChildForParent />
+                </Protected>
+              }
+            />
+
+            {/* Admin-only */}
             <Route
               path="/admin"
               element={
@@ -38,16 +56,6 @@ export default function App() {
                 </Protected>
               }
             />
-
-            <Route
-              path="/parent"
-              element={
-                <Protected role="parent">
-                  <ParentDashBoard />
-                </Protected>
-              }
-            />
-
             <Route
               path="/reports/new"
               element={
@@ -56,7 +64,6 @@ export default function App() {
                 </Protected>
               }
             />
-
             <Route
               path="/reports/monthly/new"
               element={
@@ -65,25 +72,6 @@ export default function App() {
                 </Protected>
               }
             />
-
-            <Route
-              path="/reports"
-              element={
-                <Protected>
-                  <ReportsList />
-                </Protected>
-              }
-            />
-
-            <Route
-              path="/reports/:kind/:id"
-              element={
-                <Protected>
-                  <ReportDetails />
-                </Protected>
-              }
-            />
-
             <Route
               path="/reports/:kind/:id/edit"
               element={
@@ -93,14 +81,25 @@ export default function App() {
               }
             />
 
+            {/* Authenticated (parent or admin) */}
             <Route
-              path="/link-child"
+              path="/reports"
               element={
-                <Protected role="parent">
-                  <LinkChild />
+                <Protected>
+                  <ReportsList />
                 </Protected>
               }
             />
+            <Route
+              path="/reports/:kind/:id"
+              element={
+                <Protected>
+                  <ReportDetails />
+                </Protected>
+              }
+            />
+
+            {/* ❌ Removed /parent route entirely */}
           </Routes>
         </BrowserRouter>
       </AuthProvider>

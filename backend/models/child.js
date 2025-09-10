@@ -24,12 +24,12 @@ const ChildSchema = new Schema(
     // Optional: store birth date if you want (can be omitted if not needed)
     birthDate: { type: Date, default: null },
 
-    parentId: {
+    parentId: [{
       type: Schema.Types.ObjectId,
       ref: 'User',
       index: true,
       default: null
-    },
+    }],
 
     dailyLogs: [DailyLogSchema],
     requiredItems: [{ type: String }],
@@ -47,5 +47,6 @@ ChildSchema.pre('save', function (next) {
 
 // Ensure uniqueness only when externalId exists
 ChildSchema.index({ externalId: 1 }, { unique: true, sparse: true });
+ChildSchema.index({ childId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Child', ChildSchema);
