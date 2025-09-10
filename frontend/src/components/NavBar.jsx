@@ -18,6 +18,7 @@ export default function NavBar() {
       {user?.role === 'admin' && <Link to="/admin">Admin</Link>}
       {user?.role === 'parent' && <Link to="/parent">Parent</Link>}
       {user && <Link to="/reports">Reports</Link>}
+      {user?.role === 'parent' && <Link to="/link-child">Link Child</Link>}
 
       <div className="ml-auto flex items-center gap-3">
         {!user ? (

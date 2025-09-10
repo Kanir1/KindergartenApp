@@ -11,7 +11,11 @@ import AdminDashBoard from './pages/AdminDashBoard.jsx';     // matches your fil
 import ParentDashBoard from './pages/ParentDashBoard.jsx';   // matches your filename
 import CreateReport from './pages/CreateReport.jsx';
 import Register from './pages/Register.jsx';
-import ReportsList from './pages/ReportsLists.jsx';
+import ReportsList from './pages/ReportsLists.jsx';           // <- singular filename
+import ReportDetails from './pages/ReportDetails.jsx';
+import EditReport from './pages/EditReport.jsx';
+import LinkChild from './pages/LinkChild.jsx';
+import CreateMonthly from './pages/CreateMonthly.jsx';
 
 const qc = new QueryClient();
 
@@ -52,15 +56,51 @@ export default function App() {
                 </Protected>
               }
             />
+
             <Route
-            path="/reports"
-            element={
-              // both roles can view their allowed reports
-              <Protected>
-                <ReportsList />
-              </Protected>
-            }
-          />
+              path="/reports/monthly/new"
+              element={
+                <Protected role="admin">
+                  <CreateMonthly />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/reports"
+              element={
+                <Protected>
+                  <ReportsList />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/reports/:kind/:id"
+              element={
+                <Protected>
+                  <ReportDetails />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/reports/:kind/:id/edit"
+              element={
+                <Protected role="admin">
+                  <EditReport />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/link-child"
+              element={
+                <Protected role="parent">
+                  <LinkChild />
+                </Protected>
+              }
+            />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

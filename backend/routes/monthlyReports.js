@@ -76,6 +76,7 @@ router.get('/', requireAuth, requireRole('admin', 'parent'), async (req, res) =>
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
 
   const docs = await MonthlyReport.find(q)
+    .populate('child', 'name birthDate externalId')
     .sort({ month: -1 })
     .skip((pageNum - 1) * limitNum)
     .limit(limitNum);
@@ -85,10 +86,22 @@ router.get('/', requireAuth, requireRole('admin', 'parent'), async (req, res) =>
 
 // Get by id (parent/admin) with per-child access check via proxy
 router.get('/:id', requireAuth, requireRole('admin', 'parent'), async (req, res) => {
-  const doc = await MonthlyReport.findById(req.params.id);
-  if (!doc) return res.status(404).json({ message: 'Not found' });
-  req.query.child = String(doc.child); // reuse ensureCanAccessChild
-  return require('./_childAccessProxy')(req, res, () => res.json(doc));
+  try {
+    const doc = await MonthlyReport.findById(req.params.id)
+      .populate('child', 'name birthDate externalId');
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+
+    if (req.user.role === 'parent') {
+      const childId = String(doc.child?._id || doc.child);
+      const owns = (req.user.children || []).map(String).includes(childId);
+      if (!owns) return res.status(403).json({ message: 'Forbidden: not your child' });
+    }
+
+    return res.json(doc);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: e.message || 'Server error' });
+  }
 });
 
 // Update (admin only) – duplicate-safe
