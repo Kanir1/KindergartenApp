@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../api/client';
 import { toast } from 'sonner';
 
+// ----- Schemas -----
 const dailySchema = z.object({
   meals: z
     .object({
@@ -22,6 +23,7 @@ const dailySchema = z.object({
       cups: z.coerce.number().int().min(0).max(10).optional(),
     })
     .optional(),
+  // keep sleep optional; we'll only render it for post-sleep and drop it from payload otherwise
   sleep: z
     .object({
       start: z.string().optional(),
@@ -41,19 +43,24 @@ const monthlySchema = z.object({
   notes: z.string().max(4000).optional(),
 });
 
-// --- small UI helpers ---
+// ----- Small UI helpers -----
 function Page({ children }) {
   return (
     <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white">
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-10">{children}</div>
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-10">{children}</div>
     </div>
   );
 }
-function Header({ title, children }) {
+function Header({ title }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mb-6 flex items-center justify-between">
       <h1 className="text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">{title}</h1>
-      <div className="flex gap-2">{children}</div>
+      <Link
+        to="/reports"
+        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        ← Back to reports
+      </Link>
     </div>
   );
 }
@@ -69,7 +76,7 @@ const inputCls =
   'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
 
 export default function EditReport() {
-  const { kind, id } = useParams(); // 'daily' | 'monthly'
+  const { kind, id } = useParams(); // kind: 'daily' | 'monthly'
   const nav = useNavigate();
   const qc = useQueryClient();
 
@@ -98,7 +105,8 @@ export default function EditReport() {
       reset({
         meals: data.meals || {},
         hydration: data.hydration || {},
-        sleep: data.sleep || {},
+        // we set sleep only if this report is post-sleep; for pre-sleep we leave it undefined
+        ...(data.type === 'postSleep' ? { sleep: data.sleep || {} } : {}),
         notes: data.notes || '',
       });
     } else {
@@ -116,12 +124,19 @@ export default function EditReport() {
   const onSubmit = async (values) => {
     try {
       const payload = { ...values };
+
       if (kind === 'monthly' && typeof values.milestones === 'string') {
         payload.milestones = values.milestones
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
       }
+
+      // ❗ If this is a DAILY *pre-sleep* report, make sure we don't send any sleep field
+      if (kind === 'daily' && data?.type !== 'postSleep') {
+        delete payload.sleep;
+      }
+
       await api.put(`/${kind}/${id}`, payload);
       toast.success('Report updated');
       qc.invalidateQueries({ queryKey: ['report', kind, id] });
@@ -132,71 +147,41 @@ export default function EditReport() {
     }
   };
 
-  // Loading
-  if (isLoading) {
-    return (
-      <Page>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="h-5 w-1/3 animate-pulse rounded bg-slate-200" />
-          <div className="mt-3 h-4 w-1/2 animate-pulse rounded bg-slate-200" />
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />
-            ))}
-          </div>
-        </div>
-      </Page>
-    );
-  }
-
-  // Error
+  if (isLoading) return <Page><div className="p-4">Loading…</div></Page>;
   if (isError) {
     const status = error?.response?.status;
     const msg = error?.response?.data?.message || error?.message || 'Request failed';
     return (
       <Page>
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-700">
-          <div className="font-semibold">Failed to load.</div>
-          <div className="mt-1 text-sm opacity-80">
-            Kind: <code>{String(kind)}</code>
-          </div>
-          <div className="text-sm opacity-80">
-            ID: <code>{String(id)}</code>
-          </div>
-          {status && <div className="text-sm opacity-80">HTTP {status}</div>}
-          <div className="text-sm opacity-80">{msg}</div>
-          <div className="mt-3">
-            <Link
-              className="rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50"
-              to="/reports"
-            >
-              ← Back to reports
-            </Link>
-          </div>
+        <div className="p-4 text-rose-700 space-y-2 rounded-2xl border border-rose-200 bg-rose-50">
+          <div className="font-medium">Failed to load.</div>
+          <div className="text-sm">Kind: <code>{String(kind)}</code></div>
+          <div className="text-sm">ID: <code>{String(id)}</code></div>
+          {status && <div className="text-sm">HTTP {status}</div>}
+          <div className="text-sm">{msg}</div>
+          <Link className="underline" to="/reports">Back to reports</Link>
         </div>
       </Page>
     );
   }
-
   if (!data) return <Page><div className="p-4">Not found</div></Page>;
+
+  const isDaily = kind === 'daily';
+  const isPostSleep = isDaily && data?.type === 'postSleep'; // ✅ only show Sleep when true
+  const title =
+    kind === 'daily'
+      ? `Edit Daily Report (${data.type === 'preSleep' ? 'Pre-sleep' : 'Post-sleep'})`
+      : 'Edit Monthly Report';
 
   return (
     <Page>
-      <Header title={`Edit ${kind === 'daily' ? 'Daily' : 'Monthly'} Report`}>
-        <button
-          type="button"
-          onClick={() => nav(-1)}
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          ← Back
-        </button>
-      </Header>
+      <Header title={title} />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        {kind === 'daily' ? (
+        {isDaily ? (
           <>
             <Section title="Meals">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <input placeholder="Breakfast" {...register('meals.breakfast')} className={inputCls} />
                 <input placeholder="Lunch" {...register('meals.lunch')} className={inputCls} />
                 <input placeholder="Snack" {...register('meals.snack')} className={inputCls} />
@@ -219,30 +204,21 @@ export default function EditReport() {
                   className={`${inputCls} w-28`}
                 />
               </div>
-              {errors?.hydration?.cups && (
-                <p className="mt-2 text-sm text-rose-600">{errors.hydration.cups.message}</p>
-              )}
             </Section>
 
-            <Section title="Sleep">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Start</label>
+            {/* ✅ Only render Sleep for POST-SLEEP reports */}
+            {isPostSleep && (
+              <Section title="Sleep">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <input type="datetime-local" {...register('sleep.start')} className={inputCls} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">End</label>
                   <input type="datetime-local" {...register('sleep.end')} className={inputCls} />
+                  <input type="number" min={0} placeholder="Minutes" {...register('sleep.minutes')} className={inputCls} />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">Minutes</label>
-                  <input type="number" min={0} {...register('sleep.minutes')} className={inputCls} />
-                </div>
-              </div>
-              {errors?.sleep?.minutes && (
-                <p className="mt-2 text-sm text-rose-600">{errors.sleep.minutes.message}</p>
-              )}
-            </Section>
+                {errors?.sleep?.minutes && (
+                  <p className="mt-2 text-sm text-rose-600">{errors.sleep.minutes.message}</p>
+                )}
+              </Section>
+            )}
 
             <Section title="Notes">
               <textarea rows={4} {...register('notes')} className={inputCls} />
@@ -251,10 +227,16 @@ export default function EditReport() {
           </>
         ) : (
           <>
-            <Section title="Overview">
-              <div className="grid grid-cols-1 gap-3">
-                <input placeholder="Summary" {...register('summary')} className={inputCls} />
-                <input placeholder="Milestones (comma-separated)" {...register('milestones')} className={inputCls} />
+            <Section title="Summary">
+              <textarea rows={3} {...register('summary')} className={inputCls} />
+            </Section>
+
+            <Section title="Milestones (comma-separated)">
+              <input {...register('milestones')} className={inputCls} placeholder="e.g., Started counting to 10, Learned new song" />
+            </Section>
+
+            <Section title="Overviews">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <input placeholder="Meals overview" {...register('mealsOverview')} className={inputCls} />
                 <input placeholder="Sleep overview" {...register('sleepOverview')} className={inputCls} />
                 <input placeholder="Hydration overview" {...register('hydrationOverview')} className={inputCls} />
@@ -268,17 +250,17 @@ export default function EditReport() {
           </>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={() => nav(-1)}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             disabled={isSubmitting}
-            className="rounded-2xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+            className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
           >
             {isSubmitting ? 'Saving…' : 'Save'}
           </button>
