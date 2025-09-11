@@ -19,7 +19,11 @@ export default function NavBar() {
       {user?.role === 'admin' && <Link to="/admin">Admin</Link>}
 
       {/* Authenticated users (admin or parent) */}
-      {user && <Link to="/reports">Reports</Link>}
+      {user && (
+        <Link to="/reports" state={{ reset: true }}>
+          Reports
+        </Link>
+      )}
 
       {/* Parent-only tab */}
       {user?.role === 'parent' && (

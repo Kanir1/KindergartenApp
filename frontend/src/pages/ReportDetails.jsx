@@ -5,8 +5,49 @@ import api from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { toast } from 'sonner';
 
+// --- tiny UI helpers (no external deps) ---
+function Page({ children }) {
+  return (
+    <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">{children}</div>
+    </div>
+  );
+}
+function Badge({ tone = 'slate', children }) {
+  const tones = {
+    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
+    indigo: 'bg-indigo-50 text-indigo-700 ring-indigo-200',
+    amber: 'bg-amber-50 text-amber-800 ring-amber-200',
+    green: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    rose: 'bg-rose-50 text-rose-700 ring-rose-200',
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${tones[tone]}`}>
+      {children}
+    </span>
+  );
+}
+function Section({ title, children }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">{title}</h2>
+      {children}
+    </section>
+  );
+}
+function fmtDate(d) {
+  if (!d) return '';
+  const t = new Date(d);
+  return isNaN(t) ? String(d) : t.toLocaleDateString();
+}
+function fmtDateTime(d) {
+  if (!d) return '';
+  const t = new Date(d);
+  return isNaN(t) ? String(d) : t.toLocaleString();
+}
+
 export default function ReportDetails() {
-  const { kind, id } = useParams(); // kind: 'daily' | 'monthly'
+  const { kind, id } = useParams(); // 'daily' | 'monthly'
   const { user } = useAuth();
   const nav = useNavigate();
   const isAdmin = user?.role === 'admin';
@@ -14,11 +55,10 @@ export default function ReportDetails() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['report', kind, id],
     queryFn: async () => {
-      // kind maps to backend route names: /daily/:id or /monthly/:id
-      const res = await api.get(`/${kind}/${id}`);
+      const res = await api.get(`/${kind}/${id}`); // keep your endpoint logic
       return res.data;
     },
-    retry: false,        // don't silently retry forever
+    retry: false,
     refetchOnWindowFocus: false,
   });
 
@@ -34,103 +74,236 @@ export default function ReportDetails() {
     }
   };
 
-  if (isLoading) return <div className="p-4">Loading…</div>;
-
-  if (isError) {
-    // Show exactly what failed so we can fix fast
-    const status = error?.response?.status;
-    const msg = error?.response?.data?.message || error?.message || 'Request failed';
+  // ---- Loading ----
+  if (isLoading) {
     return (
-      <div className="p-4 text-red-600 space-y-2">
-        <div>Failed to load.</div>
-        <div className="text-sm opacity-80">Kind: <code>{String(kind)}</code></div>
-        <div className="text-sm opacity-80">ID: <code>{String(id)}</code></div>
-        {status && <div className="text-sm opacity-80">HTTP {status}</div>}
-        <div className="text-sm opacity-80">{msg}</div>
-        <Link className="underline" to="/reports">Back to reports</Link>
-      </div>
+      <Page>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="h-5 w-1/3 animate-pulse rounded bg-slate-200" />
+          <div className="mt-3 h-4 w-1/2 animate-pulse rounded bg-slate-200" />
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse rounded-2xl border border-slate-200 bg-slate-100" />
+            ))}
+          </div>
+        </div>
+      </Page>
     );
   }
 
-  if (!data) return <div className="p-4">Not found</div>;
+  // ---- Error ----
+  if (isError) {
+    const status = error?.response?.status;
+    const msg = error?.response?.data?.message || error?.message || 'Request failed';
+    return (
+      <Page>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-700">
+          <div className="font-semibold">Failed to load.</div>
+          <div className="mt-1 text-sm opacity-80">Kind: <code>{String(kind)}</code></div>
+          <div className="text-sm opacity-80">ID: <code>{String(id)}</code></div>
+          {status && <div className="text-sm opacity-80">HTTP {status}</div>}
+          <div className="text-sm opacity-80">{msg}</div>
+          <div className="mt-3">
+            <Link
+              className="rounded-xl border border-rose-300 bg-white px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50"
+              to="/reports"
+            >
+              ← Back to reports
+            </Link>
+          </div>
+        </div>
+      </Page>
+    );
+  }
 
-  const head = kind === 'daily'
-    ? `${data.date} • ${data.type === 'preSleep' ? 'Pre-sleep' : 'Post-sleep'}`
-    : `${data.month}`;
+  if (!data) return <Page><div className="p-4">Not found</div></Page>;
+
+  // ---- Header data (KEEPING your logic) ----
+  const head =
+    kind === 'daily'
+      ? `${fmtDate(data.date)} • ${data.type === 'preSleep' ? 'Pre-sleep' : 'Post-sleep'}`
+      : `${data.month || ''}`;
+
+  const childName = data.child?.name || '—';
+  const childId = data.child?.externalId || data.child?.childId || '';
 
   return (
-    <div className="max-w-3xl mx-auto p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{head}</h1>
-        <div className="text-sm opacity-70">{data.child?.name || '—'}</div>
+    <Page>
+      {/* Header */}
+      <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            {kind === 'daily' ? (
+              <Badge tone={data.type === 'preSleep' ? 'indigo' : 'amber'}>
+                {data.type === 'preSleep' ? 'Pre' : 'Post'}
+              </Badge>
+            ) : (
+              <Badge tone="green">Monthly</Badge>
+            )}
+            <span className="text-sm text-slate-500">{head}</span>
+          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-800">
+            {childName}{' '}
+            {childId && <span className="text-base font-normal text-slate-500">({childId})</span>}
+          </h1>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => nav(-1)}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ← Back
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Print
+          </button>
+          {isAdmin && (
+            <>
+              <Link
+                to={`/reports/${kind}/${id}/edit`}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                Edit
+              </Link>
+              <button
+                onClick={onDelete}
+                className="rounded-xl border border-rose-300 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50"
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
+      {/* Content */}
       {kind === 'daily' ? (
-        <>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Meals */}
           {data.meals && (
-            <div className="text-sm space-y-1">
-              <div><span className="opacity-70">Breakfast:</span> {data.meals.breakfast || '—'}</div>
-              <div><span className="opacity-70">Lunch:</span> {data.meals.lunch || '—'}</div>
-              <div><span className="opacity-70">Snack:</span> {data.meals.snack || '—'}</div>
-            </div>
+            <Section title="Meals">
+              <div className="space-y-1 text-sm text-slate-800">
+                <div>
+                  <span className="opacity-70">Breakfast:</span>{' '}
+                  {data.meals.breakfast || '—'}
+                </div>
+                <div>
+                  <span className="opacity-70">Lunch:</span>{' '}
+                  {data.meals.lunch || '—'}
+                </div>
+                <div>
+                  <span className="opacity-70">Snack:</span>{' '}
+                  {data.meals.snack || '—'}
+                </div>
+              </div>
+            </Section>
           )}
+
+          {/* Hydration */}
           {data.hydration && (
-            <div className="text-sm">
-              <span className="opacity-70">Hydration:</span> {data.hydration.status || '—'}
-              {data.hydration.cups !== undefined ? ` (${data.hydration.cups} cups)` : ''}
-            </div>
+            <Section title="Hydration">
+              <div className="text-sm text-slate-800">
+                <span className="opacity-70">Status:</span>{' '}
+                {data.hydration.status || '—'}
+                {data.hydration.cups !== undefined ? (
+                  <span> ({data.hydration.cups} cups)</span>
+                ) : null}
+              </div>
+            </Section>
           )}
+
+          {/* Sleep (only for post-sleep usually) */}
           {data.type === 'postSleep' && data.sleep && (
-            <div className="text-sm">
-              <span className="opacity-70">Sleep:</span>{' '}
-              {data.sleep.start ? new Date(data.sleep.start).toLocaleString() : '—'} →{' '}
-              {data.sleep.end ? new Date(data.sleep.end).toLocaleString() : '—'}
-              {data.sleep.minutes !== undefined ? ` (${data.sleep.minutes} min)` : ''}
-            </div>
+            <Section title="Sleep">
+              <div className="text-sm text-slate-800">
+                <span className="opacity-70">Time:</span>{' '}
+                {data.sleep.start ? fmtDateTime(data.sleep.start) : '—'} →{' '}
+                {data.sleep.end ? fmtDateTime(data.sleep.end) : '—'}
+                {data.sleep.minutes !== undefined ? (
+                  <span> ({data.sleep.minutes} min)</span>
+                ) : null}
+              </div>
+            </Section>
           )}
-        </>
+        </div>
       ) : (
-        <>
-          {data.summary && <div className="text-sm"><span className="opacity-70">Summary:</span> {data.summary}</div>}
-          {Array.isArray(data.milestones) && data.milestones.length > 0 && (
-            <div className="text-sm">
-              <span className="opacity-70">Milestones:</span>
-              <ul className="list-disc pl-5">
-                {data.milestones.map((m, i) => <li key={i}>{m}</li>)}
-              </ul>
-            </div>
+        <div className="grid grid-cols-1 gap-4">
+          {/* Monthly fields (mirror your logic) */}
+          {data.summary && (
+            <Section title="Summary">
+              <p className="text-sm text-slate-800 whitespace-pre-wrap">
+                {data.summary}
+              </p>
+            </Section>
           )}
-          {data.mealsOverview && <div className="text-sm"><span className="opacity-70">Meals:</span> {data.mealsOverview}</div>}
-          {data.sleepOverview && <div className="text-sm"><span className="opacity-70">Sleep:</span> {data.sleepOverview}</div>}
-          {data.hydrationOverview && <div className="text-sm"><span className="opacity-70">Hydration:</span> {data.hydrationOverview}</div>}
-        </>
+
+          {Array.isArray(data.milestones) && data.milestones.length > 0 && (
+            <Section title="Milestones">
+              <ul className="list-disc pl-5 text-sm text-slate-800">
+                {data.milestones.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {data.mealsOverview && (
+            <Section title="Meals">
+              <p className="text-sm text-slate-800">{data.mealsOverview}</p>
+            </Section>
+          )}
+
+          {data.sleepOverview && (
+            <Section title="Sleep">
+              <p className="text-sm text-slate-800">{data.sleepOverview}</p>
+            </Section>
+          )}
+
+          {data.hydrationOverview && (
+            <Section title="Hydration">
+              <p className="text-sm text-slate-800">{data.hydrationOverview}</p>
+            </Section>
+          )}
+        </div>
       )}
 
+      {/* Notes */}
       {data.notes && (
-        <div className="text-sm">
-          <span className="opacity-70">Notes:</span> {data.notes}
+        <div className="mt-4">
+          <Section title="Notes">
+            <p className="text-sm text-slate-800 whitespace-pre-wrap">{data.notes}</p>
+          </Section>
         </div>
       )}
 
+      {/* Photos */}
       {!!(data.photos || []).length && (
-        <div className="grid grid-cols-3 gap-2">
-          {data.photos.map((p, i) => {
-            const url = typeof p === 'string' ? p : p?.url;
-            if (!url) return null;
-            return <img key={i} src={url} className="w-full h-40 object-cover rounded" />;
-          })}
+        <div className="mt-4">
+          <Section title="Photos">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {data.photos.map((p, i) => {
+                const url = typeof p === 'string' ? p : p?.url;
+                if (!url) return null;
+                return (
+                  <a
+                    key={i}
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block overflow-hidden rounded-xl border border-slate-200"
+                  >
+                    <img src={url} alt={`Photo ${i + 1}`} className="h-40 w-full object-cover" />
+                  </a>
+                );
+              })}
+            </div>
+          </Section>
         </div>
       )}
-
-      <div className="flex gap-2 pt-2">
-        <button onClick={() => window.print()} className="border rounded px-3 py-1">Print</button>
-        {isAdmin && (
-          <>
-            <Link to={`/reports/${kind}/${id}/edit`} className="border rounded px-3 py-1">Edit</Link>
-            <button onClick={onDelete} className="border rounded px-3 py-1">Delete</button>
-          </>
-        )}
-      </div>
-    </div>
+    </Page>
   );
 }

@@ -15,6 +15,8 @@ import EditReport from './pages/EditReport.jsx';
 import CreateMonthly from './pages/CreateMonthly.jsx';
 import MyChildren from './pages/MyChildren';
 import NewChildForParent from './pages/NewChildForParent';
+import ChildProfile from './pages/ChildProfile.jsx';
+import AdminParents from './pages/AdminParents.jsx';
 
 const qc = new QueryClient();
 
@@ -95,6 +97,24 @@ export default function App() {
               element={
                 <Protected>
                   <ReportDetails />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/admin/parents"
+              element={
+                <Protected role="admin">
+                  <AdminParents />
+                </Protected>
+              }
+            />
+
+            <Route
+              path="/children/:id"
+              element={
+                <Protected>
+                  <ChildProfile />
                 </Protected>
               }
             />

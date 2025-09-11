@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { toast } from 'sonner';
 
@@ -10,14 +11,51 @@ const schema = z.object({
   child: z.string().min(1, 'Child is required'),
   month: z.string().min(7, 'Month is required'), // YYYY-MM
   summary: z.string().optional(),
-  milestones: z.string().optional(),           // comma-separated; split before submit
+  milestones: z.string().optional(), // comma-separated; split before submit
   mealsOverview: z.string().optional(),
   sleepOverview: z.string().optional(),
   hydrationOverview: z.string().optional(),
   notes: z.string().max(4000).optional(),
 });
 
+// YYYY-MM for current month in local time
+function currentMonth() {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+const MAX_MONTH = currentMonth();
+
+// --- small UI helpers for consistency ---
+function Page({ children }) {
+  return (
+    <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-10">{children}</div>
+    </div>
+  );
+}
+function Header({ title, right }) {
+  return (
+    <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
+      <h1 className="text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">{title}</h1>
+      {right}
+    </div>
+  );
+}
+function Section({ title, children }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">{title}</h2>
+      {children}
+    </section>
+  );
+}
+const inputCls =
+  'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
+
 export default function CreateMonthly() {
+  const nav = useNavigate();
   const [children, setChildren] = useState([]);
 
   const {
@@ -25,20 +63,26 @@ export default function CreateMonthly() {
     handleSubmit,
     formState: { errors, isSubmitting },
     setValue,
+    watch,
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       child: '',
-      month: new Date().toISOString().slice(0, 7), // current YYYY-MM
+      month: MAX_MONTH, // current YYYY-MM
     },
   });
+
+  // Clamp month to avoid future months
+  const monthVal = watch('month');
+  useEffect(() => {
+    if (monthVal && monthVal > MAX_MONTH) setValue('month', MAX_MONTH);
+  }, [monthVal, setValue]);
 
   useEffect(() => {
     (async () => {
       // Admin route returns all children
       const res = await api.get('/children');
       setChildren(res.data || []);
-      // Optional: preselect first child
       if (res.data?.[0]?._id) setValue('child', res.data[0]._id);
     })();
   }, [setValue]);
@@ -61,8 +105,7 @@ export default function CreateMonthly() {
 
       const res = await api.post('/monthly', payload);
       toast.success('Monthly report created');
-      // go to its details page
-      window.location.assign(`/reports/monthly/${res.data._id}`);
+      nav(`/reports/monthly/${res.data._id}`);
     } catch (err) {
       const status = err?.response?.status;
       const msg =
@@ -76,75 +119,106 @@ export default function CreateMonthly() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-4">
-      <h1 className="text-xl font-semibold">Create Monthly Report</h1>
+    <Page>
+      <Header
+        title="Create Monthly Report"
+        right={
+          <button
+            type="button"
+            onClick={() => nav(-1)}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ← Back
+          </button>
+        }
+      />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm">Child</label>
-            <select {...register('child')} className="border p-2 w-full">
-              <option value="">Select…</option>
-              {children.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            {errors.child && (
-              <p className="text-red-600 text-sm">{errors.child.message}</p>
-            )}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <Section title="Basics">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Child</label>
+              <select {...register('child')} className={inputCls}>
+                <option value="">Select…</option>
+                {children.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name} {c.externalId ? `(${c.externalId})` : c.childId ? `(${c.childId})` : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.child && (
+                <p className="mt-1 text-sm text-rose-600">{errors.child.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Month</label>
+              <input type="month" max={MAX_MONTH} {...register('month')} className={inputCls} />
+              {errors.month && (
+                <p className="mt-1 text-sm text-rose-600">{errors.month.message}</p>
+              )}
+            </div>
           </div>
+        </Section>
 
-          <div>
-            <label className="block text-sm">Month</label>
-            <input type="month" {...register('month')} className="border p-2 w-full" />
-            {errors.month && (
-              <p className="text-red-600 text-sm">{errors.month.message}</p>
-            )}
+        <Section title="Overview">
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Summary</label>
+              <textarea rows={3} {...register('summary')} className={inputCls} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Milestones (comma-separated)
+              </label>
+              <input
+                {...register('milestones')}
+                className={inputCls}
+                placeholder="e.g., Started counting to 10, Learned new song"
+              />
+            </div>
           </div>
-        </div>
+        </Section>
 
-        <div>
-          <label className="block text-sm mb-1">Summary</label>
-          <textarea rows={3} {...register('summary')} className="border p-2 w-full" />
-        </div>
-
-        <div>
-          <label className="block text-sm mb-1">Milestones (comma-separated)</label>
-          <input {...register('milestones')} className="border p-2 w-full" placeholder="e.g., Started counting to 10, Learned new song" />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-sm mb-1">Meals overview</label>
-            <input {...register('mealsOverview')} className="border p-2 w-full" />
+        <Section title="Highlights">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Meals overview</label>
+              <input {...register('mealsOverview')} className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Sleep overview</label>
+              <input {...register('sleepOverview')} className={inputCls} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Hydration overview</label>
+              <input {...register('hydrationOverview')} className={inputCls} />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm mb-1">Sleep overview</label>
-            <input {...register('sleepOverview')} className="border p-2 w-full" />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Hydration overview</label>
-            <input {...register('hydrationOverview')} className="border p-2 w-full" />
-          </div>
-        </div>
+        </Section>
 
-        <div>
-          <label className="block text-sm mb-1">Notes (optional)</label>
-          <textarea rows={4} {...register('notes')} className="border p-2 w-full" />
-          {errors.notes && <p className="text-red-600 text-sm">{errors.notes.message}</p>}
-        </div>
+        <Section title="Notes (optional)">
+          <textarea rows={4} {...register('notes')} className={inputCls} />
+          {errors.notes && <p className="mt-2 text-sm text-rose-600">{errors.notes.message}</p>}
+        </Section>
 
-        <div className="flex gap-2">
-          <button type="button" onClick={() => history.back()} className="border rounded px-3 py-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => nav(-1)}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
             Cancel
           </button>
-          <button disabled={isSubmitting} className="border rounded px-3 py-2">
+          <button
+            disabled={isSubmitting}
+            className="rounded-2xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+          >
             {isSubmitting ? 'Saving…' : 'Create'}
           </button>
         </div>
       </form>
-    </div>
+    </Page>
   );
 }

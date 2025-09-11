@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import PhotoUploader from '../components/PhotoUploader';
+import { useNavigate } from 'react-router-dom';
 
 const hydrationOpt = ['yes', 'no'];
 
@@ -28,16 +29,72 @@ const schema = z.object({
     .optional(),
   sleep: z
     .object({
-      start: z.string(),
-      end: z.string(),
-      minutes: z.coerce.number().int().min(0),
+      start: z.string().optional(),
+      end: z.string().optional(),
+      minutes: z.coerce.number().int().min(0).optional(),
     })
     .optional(),
-    notes: z.string().max(2000).optional(),
+  notes: z.string().max(2000).optional(),
 });
+
+// local YYYY-MM-DD
+function todayLocalISO() {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+const MAX_DATE = todayLocalISO();
+
+// --- small UI helpers for consistency ---
+function Page({ children }) {
+  return (
+    <div className="min-h-dvh bg-gradient-to-b from-slate-50 to-white">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-10">{children}</div>
+    </div>
+  );
+}
+function Header({ title, right }) {
+  return (
+    <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
+      <h1 className="text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">{title}</h1>
+      {right}
+    </div>
+  );
+}
+function Section({ title, children }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-3 text-sm font-semibold tracking-wide text-slate-700">{title}</h2>
+      {children}
+    </section>
+  );
+}
+function Segmented({ value, onChange }) {
+  return (
+    <div className="inline-flex rounded-xl border border-slate-300 bg-white p-0.5">
+      {['pre', 'post'].map((k) => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => onChange(k)}
+          className={`px-3 py-1.5 text-sm font-medium rounded-lg ${
+            value === k ? 'bg-slate-200 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          {k === 'pre' ? 'Pre-sleep' : 'Post-sleep'}
+        </button>
+      ))}
+    </div>
+  );
+}
+const inputCls =
+  'w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
 
 export default function CreateReport() {
   const { user } = useAuth();
+  const nav = useNavigate();
   const [children, setChildren] = useState([]);
   const [photos, setPhotos] = useState([]);
 
@@ -51,13 +108,14 @@ export default function CreateReport() {
     resolver: zodResolver(schema),
     defaultValues: {
       type: 'pre',
-      date: new Date().toISOString().slice(0, 10),
+      date: MAX_DATE,
       hydration: { status: 'yes', cups: 0 },
       child: '',
     },
   });
 
   const type = watch('type');
+  const selectedChild = watch('child');
 
   useEffect(() => {
     (async () => {
@@ -77,56 +135,77 @@ export default function CreateReport() {
     const path = data.type === 'pre' ? '/daily/pre' : '/daily/post';
     const res = await api.post(path, payload);
     alert('Created report: ' + res.data._id);
+    nav(`/reports?tab=daily&child=${data.child}`);
   };
 
+  // clamp date if user picks a future one
+  const dateVal = watch('date');
+  useEffect(() => {
+    if (dateVal && dateVal > MAX_DATE) setValue('date', MAX_DATE);
+  }, [dateVal, setValue]);
+
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-4">
-      <h1 className="text-xl font-semibold">Create Daily Report</h1>
+    <Page>
+      <Header
+        title="Create Daily Report"
+        right={
+          <button
+            type="button"
+            onClick={() => nav(-1)}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ← Back
+          </button>
+        }
+      />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-        <div className="flex gap-2">
-          <label className="flex items-center gap-1">
-            <input type="radio" value="pre" {...register('type')} /> Pre-sleep
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="radio" value="post" {...register('type')} /> Post-sleep
-          </label>
-        </div>
+      {/* ✅ FORM wraps everything, including the buttons */}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {/* Type + basics */}
+        <Section title="Basics">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="sm:col-span-1">
+              <label className="mb-1 block text-xs font-medium text-slate-600">Type</label>
+              <Segmented value={type} onChange={(v) => setValue('type', v)} />
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm">Date</label>
-            <input type="date" {...register('date')} className="border p-2 w-full" />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Date</label>
+              <input type="date" max={MAX_DATE} {...register('date')} className={inputCls} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Child</label>
+              <select {...register('child')} className={inputCls}>
+                <option value="">Select…</option>
+                {children.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name} {c.externalId ? `(${c.externalId})` : c.childId ? `(${c.childId})` : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.child && (
+                <p className="mt-1 text-sm text-rose-600">
+                  {errors.child.message || 'Child required'}
+                </p>
+              )}
+            </div>
           </div>
-          <div>
-            <label className="block text-sm">Child</label>
-            <select {...register('child')} className="border p-2 w-full">
-              <option value="">Select...</option>
-              {children.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            {errors.child && (
-              <p className="text-red-600 text-sm">{errors.child.message || 'Child required'}</p>
-            )}
-          </div>
-        </div>
+        </Section>
 
-        <fieldset className="border p-3 rounded">
-          <legend className="px-1">Meals</legend>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <input placeholder="Breakfast" {...register('meals.breakfast')} className="border p-2" />
-            <input placeholder="Lunch" {...register('meals.lunch')} className="border p-2" />
-            <input placeholder="Snack" {...register('meals.snack')} className="border p-2" />
+        {/* Meals */}
+        <Section title="Meals">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <input placeholder="Breakfast" {...register('meals.breakfast')} className={inputCls} />
+            <input placeholder="Lunch" {...register('meals.lunch')} className={inputCls} />
+            <input placeholder="Snack" {...register('meals.snack')} className={inputCls} />
           </div>
-        </fieldset>
+        </Section>
 
-        <fieldset className="border p-3 rounded">
-          <legend className="px-1">Hydration</legend>
-          <div className="flex gap-3 items-center">
-            <select {...register('hydration.status')} className="border p-2">
+        {/* Hydration */}
+        <Section title="Hydration">
+          <div className="flex flex-wrap items-center gap-3">
+            <select {...register('hydration.status')} className={inputCls}>
               {hydrationOpt.map((x) => (
                 <option key={x} value={x}>
                   {x}
@@ -139,56 +218,78 @@ export default function CreateReport() {
               max={10}
               placeholder="Cups"
               {...register('hydration.cups')}
-              className="border p-2 w-24"
+              className={`${inputCls} w-28`}
             />
           </div>
-        </fieldset>
+          {errors?.hydration?.cups && (
+            <p className="mt-2 text-sm text-rose-600">{errors.hydration.cups.message}</p>
+          )}
+        </Section>
 
+        {/* Sleep (post only) */}
         {type === 'post' && (
-          <fieldset className="border p-3 rounded">
-            <legend className="px-1">Sleep</legend>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input type="datetime-local" {...register('sleep.start')} className="border p-2" />
-              <input type="datetime-local" {...register('sleep.end')} className="border p-2" />
-              <input
-                type="number"
-                min={0}
-                placeholder="Minutes"
-                {...register('sleep.minutes')}
-                className="border p-2"
-              />
+          <Section title="Sleep">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Start</label>
+                <input type="datetime-local" {...register('sleep.start')} className={inputCls} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">End</label>
+                <input type="datetime-local" {...register('sleep.end')} className={inputCls} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Minutes</label>
+                <input type="number" min={0} {...register('sleep.minutes')} className={inputCls} />
+              </div>
             </div>
-          </fieldset>
+            {errors?.sleep?.minutes && (
+              <p className="mt-2 text-sm text-rose-600">{errors.sleep.minutes.message}</p>
+            )}
+          </Section>
         )}
 
-        <div className="space-y-2">
-          <label className="block text-sm">Photos (optional)</label>
-          <PhotoUploader childId={watch('child')} onDone={(arr) => setPhotos(arr)} />
+        {/* Photos */}
+        <Section title="Photos (optional)">
+          <PhotoUploader childId={selectedChild} onDone={(arr) => setPhotos(arr)} />
           {!!photos.length && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {photos.map((p, i) => (
-                <img key={i} src={p.url} alt="uploaded" className="w-full h-24 object-cover rounded" />
+                <img key={i} src={p.url} alt="uploaded" className="h-28 w-full rounded object-cover" />
               ))}
             </div>
           )}
-        </div>
+        </Section>
 
-
-        <div>
-        <label className="block text-sm mb-1">Notes (optional)</label>
-        <textarea
+        {/* Notes */}
+        <Section title="Notes (optional)">
+          <textarea
             {...register('notes')}
             rows={4}
-            placeholder="Anything you'd like to add..."
-            className="border p-2 w-full"
-        />
-        {errors.notes && <p className="text-red-600 text-sm">{errors.notes.message}</p>}
-        </div>
+            placeholder="Anything you'd like to add…"
+            className={inputCls}
+          />
+          {errors.notes && <p className="mt-2 text-sm text-rose-600">{errors.notes.message}</p>}
+        </Section>
 
-        <button disabled={isSubmitting} className="border rounded px-3 py-2">
-          {isSubmitting ? 'Saving...' : 'Create report'}
-        </button>
+        {/* ✅ Buttons are INSIDE the form now */}
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => nav(-1)}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || !selectedChild}
+            className="rounded-2xl bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+          >
+            {isSubmitting ? 'Saving…' : 'Create report'}
+          </button>
+        </div>
       </form>
-    </div>
+    </Page>
   );
 }

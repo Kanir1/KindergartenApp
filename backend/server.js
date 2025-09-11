@@ -11,6 +11,7 @@ const childRoutes = require('./routes/childRoutes');
 const dailyReports = require('./routes/dailyReports');
 const monthlyReports = require('./routes/monthlyReports');
 const parentsRoutes = require('./routes/parents');
+const adminParents = require('./routes/adminParents');
 
 const app = express();
 
@@ -32,6 +33,9 @@ app.use('/api/daily', dailyReports);    // admin writes; parent/admin read with 
 app.use('/api/monthly', monthlyReports);// admin writes; parent/admin read with child access checks :contentReference[oaicite:4]{index=4}
 app.use('/api/parents', parentsRoutes);         // admin link/unlink children to a parent :contentReference[oaicite:5]{index=5}
 app.use('/api/uploads', require('./routes/uploads'));
+app.use('/api/admin/parents', adminParents);
+
+
 
 // Central error handler
 app.use((err, req, res, next) => {
