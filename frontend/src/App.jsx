@@ -17,6 +17,8 @@ import MyChildren from './pages/MyChildren';
 import NewChildForParent from './pages/NewChildForParent';
 import ChildProfile from './pages/ChildProfile.jsx';
 import AdminParents from './pages/AdminParents.jsx';
+import ParentRegister from "./pages/ParentRegister";
+import AdminParentChildLinker from "./pages/AdminParentChildLinker";
 
 const qc = new QueryClient();
 
@@ -30,6 +32,8 @@ export default function App() {
             <Route path="/" element={<div className="p-4">Welcome to KindergartenApp</div>} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/register/parent" element={<ParentRegister />} />
+            <Route path="/admin/link" element={<AdminParentChildLinker />} />
 
             {/* Parent-only: My Children */}
             <Route

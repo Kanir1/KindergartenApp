@@ -1,4 +1,3 @@
-// backend/routes/childRoutes.js
 const express = require('express');
 const router = express.Router();
 const Child = require('../models/child');
@@ -57,12 +56,13 @@ router.post('/mine', requireAuth, requireRole('parent'), async (req, res) => {
     const payload = {
       name: name.trim(),
       birthDate,
+      // childId is not in the schema; we still set it to keep any existing logic relying on it.
       childId: idVal,
       externalId: idVal,
       // attach current parent in all supported shapes
-      parents: [req.user.id],
-      parent: req.user.id,
-      parentId: req.user.id,
+      parents: [req.user.id],  // preferred
+      parent: req.user.id,     // legacy
+      parentId: req.user.id,   // legacy
     };
 
     const child = await Child.create(payload);

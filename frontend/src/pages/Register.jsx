@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 
@@ -75,6 +75,16 @@ export default function Register() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h1 className="text-2xl font-bold tracking-tight text-slate-800">Parent Registration</h1>
           <p className="mt-1 text-sm text-slate-500">Create your account and your first child.</p>
+
+          {/* NEW: alternative path — register without a child */}
+          <div className="mt-3">
+            <Link
+              to="/register/parent"
+              className="inline-block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Register as Parent (no child)
+            </Link>
+          </div>
 
           {serverErr && (
             <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-rose-700">{serverErr}</div>

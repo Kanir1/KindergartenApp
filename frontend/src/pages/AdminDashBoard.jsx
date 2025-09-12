@@ -51,7 +51,7 @@ export default function AdminDashBoard() {
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
 
-          {/* NEW: quick access to manage parents */}
+          {/* Existing: go to parents overview */}
           <Link
             to="/admin/parents"
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -59,6 +59,14 @@ export default function AdminDashBoard() {
             Manage Parents
           </Link>
 
+          {/* NEW: go to link/unlink tool */}
+          <Link
+            to="/admin/link"
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Link Parent ↔ Child
+          </Link>
+        
           <Link
             to="/reports/new"
             className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"

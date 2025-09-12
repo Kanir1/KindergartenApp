@@ -4,7 +4,7 @@ const DailyReport = require('../models/DailyReport');
 const Child = require('../models/child');
 const { requireAuth, requireRole, ensureCanAccessChild } = require('../middleware/auth');
 
-// Create pre-sleep report (admin only)
+// Create pre-sleep report (admin only) — now uses milkMl instead of hydration
 router.post(
   '/pre',
   requireAuth,
@@ -12,14 +12,16 @@ router.post(
   ensureCanAccessChild,
   async (req, res) => {
     try {
-      const { child, date, meals, hydration, photos = [], notes = '' } = req.body;
+      const { child, date, meals, milkMl = 0, photos = [], notes = '' } = req.body;
+
+      const ml = Number.isFinite(Number(milkMl)) ? Math.max(0, Math.floor(Number(milkMl))) : 0;
 
       const doc = await DailyReport.create({
         child,
         date,
         type: 'preSleep',
         meals,
-        hydration,
+        milkMl: ml,
         notes,
         photos,
         createdBy: req.user.id,
@@ -44,19 +46,20 @@ router.post(
   ensureCanAccessChild,
   async (req, res) => {
     try {
-      const { child, date, meals, hydration, sleep, photos = [], notes = '' } = req.body;
+       const { child, date, sleep, bathroomCount = 0, photos = [], notes } = req.body;
 
-      const doc = await DailyReport.create({
-        child,
-        date,
-        type: 'postSleep',
-        meals,
-        hydration,
-        sleep,
-        notes,
-        photos,
-        createdBy: req.user.id,
-      });
+      // normalize bathroomCount
+       const bc = Number.isFinite(Number(bathroomCount)) ? Math.max(0, Math.floor(Number(bathroomCount))) : 0;
+
+       const doc = await DailyReport.create({
+          child,
+          date,
+          type: 'postSleep',
+          sleep,                 // { start, end, minutes } — minutes optional if start/end provided
+          bathroomCount: bc,
+          photos,
+          notes,
+        });
       res.status(201).json(doc);
     } catch (e) {
       if (e?.code === 11000) {
@@ -70,8 +73,6 @@ router.post(
 );
 
 // List reports (admin/parent)
-// Parents: either all their kids, or filter by ?child= if it's theirs.
-// Admin: optional ?child= to filter any child.
 router.get('/', requireAuth, requireRole('admin', 'parent'), async (req, res) => {
   try {
     const { child, from, to, type, page = '1', limit = '20' } = req.query;
@@ -95,7 +96,6 @@ router.get('/', requireAuth, requireRole('admin', 'parent'), async (req, res) =>
       }).distinct('_id');
 
       if (child) {
-        // Only allow if the requested child is theirs
         const ok = myChildIds.map(String).includes(String(child));
         if (!ok) return res.status(403).json({ message: 'Forbidden: not your child' });
         q.child = child;
@@ -120,7 +120,7 @@ router.get('/', requireAuth, requireRole('admin', 'parent'), async (req, res) =>
   }
 });
 
-// Get by id (parent/admin) with per-child access check against DB
+// Get by id (parent/admin)
 router.get('/:id', requireAuth, requireRole('admin', 'parent'), async (req, res) => {
   try {
     const doc = await DailyReport.findById(req.params.id)
@@ -130,7 +130,6 @@ router.get('/:id', requireAuth, requireRole('admin', 'parent'), async (req, res)
 
     if (req.user.role === 'admin') return res.json(doc);
 
-    // Parent: ensure the report's child belongs to them (supports parent/parentId/parents)
     const userId = req.user.id;
     const childId = String(doc.child?._id || doc.child);
     const owns = await Child.exists({
@@ -150,6 +149,7 @@ router.put('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const existing = await DailyReport.findById(req.params.id);
     if (!existing) return res.status(404).json({ message: 'Not found' });
+
     Object.assign(existing, req.body);
     await existing.save();
     res.json(existing);

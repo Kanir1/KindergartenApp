@@ -18,18 +18,18 @@ const ChildSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
 
-    // NEW: human-friendly ID parents can type at signup (case-insensitive)
+    // Human-friendly ID parents can type at signup (case-insensitive)
     externalId: { type: String, trim: true, index: { unique: true, sparse: true } },
 
-    // Optional: store birth date if you want (can be omitted if not needed)
+    // Optional: store birth date
     birthDate: { type: Date, default: null },
 
-    parentId: [{
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      index: true,
-      default: null
-    }],
+    // NEW (preferred): multi-parent support
+    parents: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
+
+    // Legacy/single-parent shapes kept for compatibility with older data
+    parent:   { type: Schema.Types.ObjectId, ref: 'User', index: true, default: null },
+    parentId: { type: Schema.Types.ObjectId, ref: 'User', index: true, default: null },
 
     dailyLogs: [DailyLogSchema],
     requiredItems: [{ type: String }],
@@ -42,11 +42,18 @@ const ChildSchema = new Schema(
 // Normalize externalId so ABC123 and abc123 are treated the same
 ChildSchema.pre('save', function (next) {
   if (this.externalId) this.externalId = this.externalId.trim().toUpperCase();
+
+  // Backfill: if only a legacy single-parent exists, sync it into parents[]
+  if ((!this.parents || this.parents.length === 0) && (this.parent || this.parentId)) {
+    const single = this.parent || this.parentId || null;
+    if (single) this.parents = [single];
+  }
   next();
 });
 
 // Ensure uniqueness only when externalId exists
 ChildSchema.index({ externalId: 1 }, { unique: true, sparse: true });
-ChildSchema.index({ childId: 1 }, { unique: true, sparse: true });
+
+// NOTE: removed stray { childId: 1 } index (field not defined in schema)
 
 module.exports = mongoose.model('Child', ChildSchema);

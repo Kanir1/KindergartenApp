@@ -1,4 +1,3 @@
-// backend/routes/adminParents.js
 const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
@@ -61,10 +60,11 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
 
 /**
  * DELETE /api/admin/parents/:id
- * Cascade delete:
- *  - the parent user
- *  - all children linked to that parent (by any of the supported fields)
- *  - all daily & monthly reports for those children
+ * SAFE removal:
+ *  1) Unlink this parent from all children (both new + legacy fields).
+ *  2) Identify children that became orphaned (no parents[], no legacy parent/parentId).
+ *  3) Delete reports for those orphaned children, then delete the children.
+ *  4) Delete the parent user.
  */
 router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
@@ -84,22 +84,44 @@ router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
         .distinct('_id', childFilterForParent(parent._id))
         .session(session);
 
-      // Delete reports first
-      const dailyRes   = await DailyReport.deleteMany({ child: { $in: childIds } }).session(session);
-      const monthlyRes = await MonthlyReport.deleteMany({ child: { $in: childIds } }).session(session);
+      // 1) Unlink the parent from children (both new and legacy fields)
+      await Child.updateMany(
+        { _id: { $in: childIds } },
+        {
+          $pull: { parents: parent._id },
+          $unset: { parent: "", parentId: "" }
+        }
+      ).session(session);
 
-      // Delete children
-      const childrenRes = await Child.deleteMany({ _id: { $in: childIds } }).session(session);
+      // 2) Find children that are now orphaned (no parents[], no legacy)
+      const orphanIds = await Child.distinct('_id', {
+        _id: { $in: childIds },
+        $and: [
+          { $or: [{ parents: { $exists: false } }, { parents: { $size: 0 } }] },
+          { parent: { $exists: false } },
+          { parentId: { $exists: false } },
+        ],
+      }).session(session);
 
-      // Finally delete the user
+      // 3) Delete reports for orphaned children, then delete the children
+      const [dailyRes, monthlyRes] = await Promise.all([
+        DailyReport.deleteMany({ child: { $in: orphanIds } }).session(session),
+        MonthlyReport.deleteMany({ child: { $in: orphanIds } }).session(session),
+      ]);
+      const childrenRes = await Child.deleteMany({ _id: { $in: orphanIds } }).session(session);
+
+      // (Optional) cleanup reverse link array on user doc — not strictly required
+      // since we're deleting the user anyway.
+
+      // 4) Delete the parent user
       await User.deleteOne({ _id: parent._id }).session(session);
 
       res.json({
         ok: true,
         deleted: {
           children: childrenRes?.deletedCount || 0,
-          dailyReports: dailyRes?.deletedCount || 0,
-          monthlyReports: monthlyRes?.deletedCount || 0,
+          dailyReports: (dailyRes?.deletedCount || 0),
+          monthlyReports: (monthlyRes?.deletedCount || 0),
           user: 1,
         },
       });
