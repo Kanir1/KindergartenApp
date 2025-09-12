@@ -32,7 +32,10 @@ export default function CreateReport() {
     notes: "",
   });
 
-  // Compute minutes if start/end present
+  // NEW: files selected but not yet uploaded (they will be uploaded on Save)
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [submitErr, setSubmitErr] = useState("");
+
   const computedMinutes = useMemo(() => {
     if (!form.sleep.start || !form.sleep.end) return "";
     const s = new Date(form.sleep.start).getTime();
@@ -49,32 +52,38 @@ export default function CreateReport() {
 
   const mutation = useMutation({
     mutationFn: async (payload) => {
-      if (form.type === "pre") {
-        return (await api.post("/daily/pre", payload)).data;
-      }
+      if (form.type === "pre") return (await api.post("/daily/pre", payload)).data;
       return (await api.post("/daily/post", payload)).data;
     },
-    onSuccess: () => {
-      nav(`/reports?tab=daily&child=${form.child}`);
-    },
+    onSuccess: () => nav(`/reports?tab=daily&child=${form.child}`),
   });
+
+  const uploadNewPhotosIfAny = async () => {
+    if (!selectedFiles.length) return [];
+    const fd = new FormData();
+    selectedFiles.forEach((f) => fd.append("photos", f)); // field name 'photos'
+    if (form.child) fd.append("child", form.child);       // optional: folder grouping on backend
+    const res = await api.post("/uploads/photos", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    const uploaded = (res.data?.photos || []).map((p) => p.url);
+    return uploaded;
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    const base = {
-      child: form.child,
-      date: form.date,
-      photos: form.photos,
-      notes: form.notes,
-    };
+    setSubmitErr("");
+
+    const base = { child: form.child, date: form.date, notes: form.notes };
 
     try {
+      // 1) Upload any newly selected files first
+      const uploaded = await uploadNewPhotosIfAny();
+      const photos = [...(form.photos || []), ...uploaded];
+
+      // 2) Send the report payload
       if (form.type === "pre") {
-        const payload = {
-          ...base,
-          meals: form.meals,
-          milkMl: Number(form.milkMl) || 0,
-        };
+        const payload = { ...base, meals: form.meals, milkMl: Number(form.milkMl) || 0, photos };
         await mutation.mutateAsync(payload);
       } else {
         const payload = {
@@ -86,15 +95,13 @@ export default function CreateReport() {
               form.sleep.minutes !== "" ? Number(form.sleep.minutes) : computedMinutes || undefined,
           },
           bathroomCount: Number(form.bathroomCount) || 0,
+          photos,
         };
         await mutation.mutateAsync(payload);
       }
     } catch (e2) {
-      if (e2?.response?.status === 409) {
-        alert("A report for this child/date/type already exists.");
-      } else {
-        alert(e2?.response?.data?.message || e2.message || "Failed to create report");
-      }
+      if (e2?.response?.status === 409) setSubmitErr("A report for this child/date/type already exists.");
+      else setSubmitErr(e2?.response?.data?.message || e2.message || "Failed to create report");
     }
   };
 
@@ -104,6 +111,12 @@ export default function CreateReport() {
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold tracking-tight text-slate-800">Create Daily Report</h1>
         </div>
+
+        {submitErr && (
+          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-rose-700 text-sm">
+            {submitErr}
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4">
           <Section title="Basics">
@@ -243,9 +256,7 @@ export default function CreateReport() {
                   />
                 </div>
                 {computedMinutes !== "" && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Auto-computed: {computedMinutes} minutes
-                  </p>
+                  <p className="mt-1 text-xs text-slate-500">Auto-computed: {computedMinutes} minutes</p>
                 )}
               </Section>
 
@@ -269,8 +280,44 @@ export default function CreateReport() {
           )}
 
           <Section title="Photos (optional)">
-            {/* Keep your existing upload UI; this is a placeholder to bind to form.photos if needed */}
-            <div className="text-xs text-slate-500">Your current upload control can remain here.</div>
+            {/* Pretty file button */}
+            <label
+              htmlFor="photos-create"
+              className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 active:bg-slate-100"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-70" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 5v6m0 0H6m6 0h6M5 19h14a2 2 0 0 0 2-2V9.5a2 2 0 0 0-.586-1.414l-2.5-2.5A2 2 0 0 0 16.5 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z"/>
+              </svg>
+              Choose image(s)
+            </label>
+            <input
+              id="photos-create"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
+              className="sr-only"
+            />
+
+            {/* Small caption with count / names */}
+            {selectedFiles.length > 0 ? (
+              <p className="mt-2 text-xs text-slate-600">
+                Selected: {selectedFiles.map((f) => f.name).join(", ")}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">No files chosen</p>
+            )}
+
+            {/* Existing uploaded photos (thumbnails) */}
+            {!!(form.photos || []).length && (
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {(form.photos || []).map((url, i) => (
+                  <div key={url + i} className="overflow-hidden rounded-xl border border-slate-200">
+                    <img src={url} alt={`Photo ${i + 1}`} className="h-40 w-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            )}
           </Section>
 
           <Section title="Notes (optional)">
