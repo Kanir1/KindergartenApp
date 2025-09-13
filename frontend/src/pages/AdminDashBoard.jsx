@@ -37,6 +37,7 @@ function SkeletonCard() {
 export default function AdminDashBoard() {
   const { data = [], isLoading, error, isFetching, refetch } = useQuery({
     queryKey: ['children-all'],
+    // Backend now populates parents and derives parentName
     queryFn: async () => (await api.get('/children')).data,
   });
 
@@ -51,12 +52,15 @@ export default function AdminDashBoard() {
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
 
-
-          <Link to="/admin/parents/new" className="rounded-2xl bg-indigo-600 px-4 py-2 text-white">
-            Register Parent
+          {/* Link/Unlink tool */}
+          <Link
+            to="/admin/link"
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Link Parent ↔ Child
           </Link>
 
-          {/* Existing: go to parents overview */}
+          {/* Parents overview */}
           <Link
             to="/admin/parents"
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -64,14 +68,10 @@ export default function AdminDashBoard() {
             Manage Parents
           </Link>
 
-          {/* NEW: go to link/unlink tool */}
-          <Link
-            to="/admin/link"
-            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Link Parent ↔ Child
+          <Link to="/admin/parents/new" className="rounded-2xl bg-indigo-600 px-4 py-2 text-white">
+            Register Parent
           </Link>
-        
+
           <Link
             to="/reports/new"
             className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
@@ -108,6 +108,14 @@ export default function AdminDashBoard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.map((c) => {
             const idLabel = c.externalId || c.childId || c._id;
+
+            const parentLabel =
+              (c.parentName && c.parentName.trim())
+                ? c.parentName
+                : (Array.isArray(c.parents) && c.parents.length
+                    ? `${c.parents.length} parent${c.parents.length > 1 ? 's' : ''}`
+                    : (c.parentId || '—'));
+
             return (
               <div
                 key={c._id}
@@ -117,7 +125,7 @@ export default function AdminDashBoard() {
                   <div className="min-w-0">
                     <div className="truncate text-base font-semibold text-slate-800">{c.name}</div>
                     <p className="mt-0.5 truncate text-sm text-slate-500">
-                      Parent: {c.parentName || c.parentId || '—'}
+                      Parent: {parentLabel}
                     </p>
                     {idLabel && (
                       <p className="mt-0.5 truncate text-xs text-slate-500">ID: {idLabel}</p>

@@ -33,12 +33,12 @@ export default function AdminParents() {
 
   const onDelete = async (p) => {
     const go = confirm(
-      `Delete parent "${p.name || p.email}"?\n\nThis will delete the user, all of their children, and ALL reports for those children.`
+      `Delete parent "${p.name || p.email}"?\n\nThis will delete the user account ONLY.\nChildren and ALL reports will be preserved.`
     );
     if (!go) return;
     try {
       await del.mutateAsync(p._id);
-      alert('Parent and related data deleted.');
+      alert('Parent deleted. Children and reports were preserved.');
     } catch (e) {
       alert(e?.response?.data?.message || e.message || 'Delete failed');
     }
@@ -82,7 +82,7 @@ export default function AdminParents() {
                 <button
                   onClick={() => onDelete(p)}
                   className="rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                  title="Delete parent and all related data"
+                  title="Delete parent (children & reports are preserved)"
                 >
                   Delete
                 </button>

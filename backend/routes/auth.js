@@ -32,67 +32,86 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ message: 'Email already registered' });
     }
 
+    // ⛔️ Pre-check: if admin supplied a newChild with an existing externalId, fail early
+    if (newChild && typeof newChild === 'object') {
+      const ext = (newChild.externalId || '').trim().toUpperCase();
+      const childName = (newChild.name || '').trim();
+      if (!ext || !childName) {
+        return res
+          .status(400)
+          .json({ message: 'newChild.externalId and newChild.name are required' });
+      }
+      const exists = await Child.findOne({ externalId: ext });
+      if (exists) {
+        return res.status(409).json({
+          message: 'Child ID already exists. Use the Link Parent ↔ Child tool instead.',
+        });
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, passwordHash, role });
 
     // Parent-specific: link or create children
     if (user.role === 'parent') {
-      // 1) Link existing children by Mongo IDs (only if not linked yet)
+      // 1) Optional: link existing children by Mongo ObjectIds — ONLY if unowned
       if (Array.isArray(childIds) && childIds.length) {
         const validIds = childIds.filter(isObjectId);
         if (validIds.length !== childIds.length) {
-          return res
-            .status(400)
-            .json({ message: 'One or more childIds are invalid ObjectIds' });
+          return res.status(400).json({ message: 'One or more childIds are invalid ObjectIds' });
         }
 
         const objIds = validIds.map((id) => new mongoose.Types.ObjectId(id));
         const result = await Child.updateMany(
           {
             _id: { $in: objIds },
-            $or: [{ parentId: null }, { parentId: { $exists: false } }],
+            // "unowned" => no parents[], no legacy parent/parentId
+            $and: [
+              { $or: [{ parents: { $exists: false } }, { parents: { $size: 0 } }] },
+              { $or: [{ parent: null }, { parent: { $exists: false } }] },
+              { $or: [{ parentId: null }, { parentId: { $exists: false } }] },
+            ],
           },
-          { $set: { parentId: user._id } }
+          {
+            // set all ownership shapes
+            $set: { parentId: user._id, parent: user._id },
+            $addToSet: { parents: user._id },
+          }
         );
-        // Optional for debugging/telemetry
+
         user._linkStats = {
           matched: result.matchedCount ?? result.n,
           modified: result.modifiedCount ?? result.nModified,
         };
       }
 
-      // 2) Create or link by human-friendly externalId
+      // 2) Admin-supplied newChild by human-friendly externalId
       if (newChild && typeof newChild === 'object') {
         const ext = (newChild.externalId || '').trim().toUpperCase();
         const childName = (newChild.name || '').trim();
 
-        if (!ext || !childName) {
-          return res
-            .status(400)
-            .json({ message: 'newChild.externalId and newChild.name are required' });
-        }
-
-        let kid = await Child.findOne({ externalId: ext });
-
-        if (kid) {
-          // If already linked to someone else → reject
-          if (kid.parentId && String(kid.parentId) !== String(user._id)) {
-            return res
-              .status(409)
-              .json({ message: 'Child ID is already linked to another parent' });
-          }
-          // Link to this parent; keep existing name unless it’s empty
-          kid.parentId = user._id;
-          if (!kid.name) kid.name = childName;
-          await kid.save();
-        } else {
-          // Create new child for this parent
-          kid = await Child.create({
+        // We already validated presence & existence above.
+        try {
+          await Child.create({
             name: childName,
             externalId: ext,
-            parentId: user._id,
             birthDate: newChild.birthDate || null,
+            // set all ownership shapes — this new child belongs ONLY to this parent at creation
+            parentId: user._id,   // legacy
+            parent:   user._id,   // legacy
+            parents: [user._id],  // preferred
           });
+        } catch (e) {
+          // If a race caused a duplicate externalId, roll back the user so registration fails entirely
+          if (e?.code === 11000) {
+            await User.deleteOne({ _id: user._id });
+            return res.status(409).json({
+              message: 'Child ID already exists. Use the Link Parent ↔ Child tool instead.',
+            });
+          }
+          // Any other error: also roll back the user
+          await User.deleteOne({ _id: user._id });
+          return res.status(400).json({ message: e.message || 'Failed to create child' });
         }
       }
     }

@@ -8,7 +8,7 @@ function ownsChildDoc(childDoc, userId) {
   const uid = String(userId);
   if (childDoc.parent && String(childDoc.parent) === uid) return true;
   if (childDoc.parentId && String(childDoc.parentId) === uid) return true; // legacy
-  if (Array.isArray(childDoc.parents) && childDoc.parents.some(p => String(p) === uid)) return true;
+  if (Array.isArray(childDoc.parents) && childDoc.parents.some((p) => String(p) === uid)) return true;
   return false;
 }
 
@@ -60,9 +60,9 @@ router.post('/mine', requireAuth, requireRole('parent'), async (req, res) => {
       childId: idVal,
       externalId: idVal,
       // attach current parent in all supported shapes
-      parents: [req.user.id],  // preferred
-      parent: req.user.id,     // legacy
-      parentId: req.user.id,   // legacy
+      parents: [req.user.id], // preferred
+      parent: req.user.id, // legacy
+      parentId: req.user.id, // legacy
     };
 
     const child = await Child.create(payload);
@@ -82,9 +82,23 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
   }
 });
 
-// ===== ADMIN: list all children (unchanged) =====
-router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
-  const children = await Child.find().sort({ createdAt: -1 });
+// ===== ADMIN: list all children (POPULATED + parentName derived) =====
+router.get('/', requireAuth, requireRole('admin'), async (_req, res) => {
+  const rows = await Child.find()
+    .sort({ createdAt: -1 })
+    .populate('parents', 'name email')
+    .lean();
+
+  const children = rows.map((c) => ({
+    ...c,
+    parentName: Array.isArray(c.parents)
+      ? c.parents
+          .map((p) => p?.name || p?.email)
+          .filter(Boolean)
+          .join(', ')
+      : '',
+  }));
+
   res.json(children);
 });
 
