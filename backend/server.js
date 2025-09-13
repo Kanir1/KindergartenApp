@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const path = require('path');
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use('/api/monthly', monthlyReports);// admin writes; parent/admin read with 
 app.use('/api/parents', parentsRoutes);         // admin link/unlink children to a parent :contentReference[oaicite:5]{index=5}
 app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/admin/parents', adminParents);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
 
