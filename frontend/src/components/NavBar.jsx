@@ -39,7 +39,6 @@ export default function NavBar() {
         {!user ? (
           <>
             <Link to="/login">Login</Link>
-            <Link to="/register">Register</Link>
           </>
         ) : (
           <>

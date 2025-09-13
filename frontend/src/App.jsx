@@ -8,7 +8,6 @@ import Protected from './components/Protected.jsx';
 import Login from './pages/Login.jsx';
 import AdminDashBoard from './pages/AdminDashBoard.jsx';
 import CreateReport from './pages/CreateReport.jsx';
-import Register from './pages/Register.jsx';
 import ReportsList from './pages/ReportsLists.jsx'; // keep your current path
 import ReportDetails from './pages/ReportDetails.jsx';
 import EditReport from './pages/EditReport.jsx';
@@ -19,6 +18,7 @@ import ChildProfile from './pages/ChildProfile.jsx';
 import AdminParents from './pages/AdminParents.jsx';
 import ParentRegister from "./pages/ParentRegister";
 import AdminParentChildLinker from "./pages/AdminParentChildLinker";
+import AdminCreateParent from "./pages/AdminCreateParent";
 
 const qc = new QueryClient();
 
@@ -31,9 +31,19 @@ export default function App() {
           <Routes>
             <Route path="/" element={<div className="p-4">Welcome to KindergartenApp</div>} />
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
             <Route path="/register/parent" element={<ParentRegister />} />
             <Route path="/admin/link" element={<AdminParentChildLinker />} />
+
+
+            {/* Admin-only: create parent */}
+            <Route
+              path="/admin/parents/new"
+              element={
+                <Protected role="admin">
+                  <AdminCreateParent />
+                </Protected>
+              }
+            />
 
             {/* Parent-only: My Children */}
             <Route
@@ -122,6 +132,7 @@ export default function App() {
                 </Protected>
               }
             />
+
 
             {/* ❌ Removed /parent route entirely */}
           </Routes>
