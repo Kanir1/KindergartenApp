@@ -1,4 +1,3 @@
-// src/pages/ParentDashBoard.jsx
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
@@ -53,12 +52,7 @@ export default function ParentDashBoard() {
           >
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
-          <Link
-            to="/my-children/new"
-            className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-          >
-            Add Child
-          </Link>
+          {/* ❌ Removed Add Child button */}
         </div>
       </Header>
 
@@ -84,16 +78,11 @@ export default function ParentDashBoard() {
               />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-slate-800">No children yet</h3>
-          <p className="mt-1 text-sm text-slate-500">Add your first child to get started.</p>
-          <div className="mt-6">
-            <Link
-              to="/my-children/new"
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-            >
-              Add Child
-            </Link>
-          </div>
+          <h3 className="text-lg font-semibold text-slate-800">No children linked yet</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Please contact the kindergarten admin to link your child to your account.
+          </p>
+          {/* ❌ Removed Add Child link */}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -117,21 +106,12 @@ export default function ParentDashBoard() {
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {/* Keep links conservative to routes you already use */}
                 <Link
                   to="/reports"
                   className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
                   View Reports
                 </Link>
-                {/* If you have a child profile route, keep this:
-                <Link
-                  to={`/children/${c._id}`}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  View Profile
-                </Link>
-                */}
               </div>
             </div>
           ))}

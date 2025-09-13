@@ -51,6 +51,7 @@ export default function AdminDashBoard() {
           >
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
+          
 
           {/* Link/Unlink tool */}
           <Link
@@ -70,6 +71,13 @@ export default function AdminDashBoard() {
 
           <Link to="/admin/parents/new" className="rounded-2xl bg-indigo-600 px-4 py-2 text-white">
             Register Parent
+          </Link>
+
+          <Link
+            to="/admin/children/new"
+            className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+          >
+            Add Child
           </Link>
 
           <Link

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './auth/AuthProvider.jsx';
 
@@ -13,12 +13,12 @@ import ReportDetails from './pages/ReportDetails.jsx';
 import EditReport from './pages/EditReport.jsx';
 import CreateMonthly from './pages/CreateMonthly.jsx';
 import MyChildren from './pages/MyChildren';
-import NewChildForParent from './pages/NewChildForParent';
+import NewChildForParent from './pages/NewChildForParent'; // reused as admin form route
 import ChildProfile from './pages/ChildProfile.jsx';
 import AdminParents from './pages/AdminParents.jsx';
-import ParentRegister from "./pages/ParentRegister";
-import AdminParentChildLinker from "./pages/AdminParentChildLinker";
-import AdminCreateParent from "./pages/AdminCreateParent";
+import ParentRegister from './pages/ParentRegister';
+import AdminParentChildLinker from './pages/AdminParentChildLinker';
+import AdminCreateParent from './pages/AdminCreateParent';
 
 const qc = new QueryClient();
 
@@ -33,7 +33,6 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register/parent" element={<ParentRegister />} />
             <Route path="/admin/link" element={<AdminParentChildLinker />} />
-
 
             {/* Admin-only: create parent */}
             <Route
@@ -54,13 +53,11 @@ export default function App() {
                 </Protected>
               }
             />
+
+            {/* Redirect old parent add-child path to new admin path */}
             <Route
               path="/my-children/new"
-              element={
-                <Protected role="parent">
-                  <NewChildForParent />
-                </Protected>
-              }
+              element={<Navigate to="/admin/children/new?from=parent" replace />}
             />
 
             {/* Admin-only */}
@@ -72,6 +69,17 @@ export default function App() {
                 </Protected>
               }
             />
+
+            {/* Admin-only: Add Child (moved here) */}
+            <Route
+              path="/admin/children/new"
+              element={
+                <Protected role="admin">
+                  <NewChildForParent />
+                </Protected>
+              }
+            />
+
             <Route
               path="/reports/new"
               element={
@@ -132,9 +140,6 @@ export default function App() {
                 </Protected>
               }
             />
-
-
-            {/* ❌ Removed /parent route entirely */}
           </Routes>
         </BrowserRouter>
       </AuthProvider>

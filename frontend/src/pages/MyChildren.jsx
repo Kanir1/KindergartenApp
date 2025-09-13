@@ -1,4 +1,3 @@
-// src/pages/MyChildren.jsx
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api from "../api/client";
@@ -40,12 +39,7 @@ export default function MyChildren() {
   return (
     <Page>
       <Header title="My Children">
-        <Link
-          to="/my-children/new"
-          className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          Add Child
-        </Link>
+        {/* ❌ removed Add Child button (parents no longer add children) */}
       </Header>
 
       {created && (
@@ -125,18 +119,11 @@ function EmptyState() {
           />
         </svg>
       </div>
-      <h3 className="text-lg font-semibold text-slate-800">No children yet</h3>
+      <h3 className="text-lg font-semibold text-slate-800">No children linked yet</h3>
       <p className="mt-1 text-sm text-slate-500">
-        Add your first child to start receiving daily reports.
+        Please contact the kindergarten admin to link your child to your account.
       </p>
-      <div className="mt-6">
-        <Link
-          to="/my-children/new"
-          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          Add Child
-        </Link>
-      </div>
+      {/* ❌ removed parent-side Add Child CTA */}
     </div>
   );
 }
