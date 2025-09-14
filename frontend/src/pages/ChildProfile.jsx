@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api from "../api/client";
 
@@ -13,6 +13,8 @@ function Section({ title, children }) {
 
 export default function ChildProfile() {
   const { id } = useParams();
+  const nav = useNavigate();
+  const location = useLocation();
 
   const { data: child, isLoading, error } = useQuery({
     queryKey: ["child", id],
@@ -30,6 +32,11 @@ export default function ChildProfile() {
   const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
   const ORIGIN = API_BASE.replace(/\/api\/?$/, "");
 
+  // Prefer going back to the real previous page; if none, do nothing
+  const goBack = () => {
+    if (window.history.length > 1) nav(-1);
+  };
+
   return (
     <div className="mx-auto max-w-5xl p-4 space-y-6">
       <div className="flex items-center justify-between">
@@ -37,15 +44,18 @@ export default function ChildProfile() {
           {child?.name || (isLoading ? "Loading…" : "Child Profile")}
         </h1>
         <div className="flex gap-2">
-          <Link
-            to={-1}
+          <button
+            onClick={goBack}
+            type="button"
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             ← Back
-          </Link>
+          </button>
           {child?._id && (
             <>
               <Link
+                // carry current location so Edit can optionally use it
+                state={{ from: location }}
                 to={`/children/${child._id}/edit`}
                 className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >

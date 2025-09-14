@@ -1,4 +1,4 @@
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import api from "../api/client";
@@ -19,6 +19,7 @@ export default function ChildProfileEdit() {
   const { id } = useParams();
   const qc = useQueryClient();
   const nav = useNavigate();
+  const location = useLocation();
 
   const { data: child, isLoading, error } = useQuery({
     queryKey: ["child", id],
@@ -37,11 +38,17 @@ export default function ChildProfileEdit() {
     }
   }, [child]);
 
+  // Smart return: if we have history, pop back; otherwise land on profile (replace)
+  const backToProfile = () => {
+    if (window.history.length > 1) nav(-1);
+    else nav(`/children/${id}`, { replace: true, state: { from: location.state?.from || null } });
+  };
+
   const saveNotes = useMutation({
     mutationFn: async (payload) => (await api.patch(`/children/${id}/parent-notes`, payload)).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["child", id] });
-      nav(`/children/${id}`, { replace: true });
+      backToProfile(); // pop Edit out of history
     },
     onError: (e) => setNotesErr(e?.response?.data?.message || e.message),
   });
@@ -81,12 +88,13 @@ export default function ChildProfileEdit() {
           {child?.name || (isLoading ? "Loading…" : "Edit Child")}
         </h1>
         <div className="flex gap-2">
-          <Link
-            to={`/children/${id}`}
+          <button
+            type="button"
+            onClick={backToProfile}
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Cancel
-          </Link>
+          </button>
           <Link
             to={`/reports?child=${id}`}
             className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
