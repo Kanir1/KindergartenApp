@@ -19,6 +19,7 @@ import AdminParents from './pages/AdminParents.jsx';
 import ParentRegister from './pages/ParentRegister';
 import AdminParentChildLinker from './pages/AdminParentChildLinker';
 import AdminCreateParent from './pages/AdminCreateParent';
+import ChildProfileEdit from './pages/ChildProfileEdit.jsx';
 
 const qc = new QueryClient();
 
@@ -140,6 +141,17 @@ export default function App() {
                 </Protected>
               }
             />
+
+            <Route
+              path="/children/:id/edit"
+              element={
+                <Protected>
+                  <ChildProfileEdit />
+                </Protected>
+              }
+            />
+
+
           </Routes>
         </BrowserRouter>
       </AuthProvider>
