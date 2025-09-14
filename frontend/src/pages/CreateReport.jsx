@@ -12,6 +12,127 @@ function Section({ title, children }) {
   );
 }
 
+/** ===== Hebrew preset options (from your photo) ===== */
+const PRESETS = {
+  פחמימות: ["לחם", "קוסקוס", "פתיתים", "עוגה", "פסטה"],
+  חלבונים: ["ביצה", "טונה", "עוף", "בשר בקר", "גבינה לבנה", "גבינה צהובה", "קוטג׳"],
+  ממרחים: ["חומוס", "טחינה", "טחינה וסילאן", "לבנה", "ממרח תמרים", "ריבה"],
+  "ירקות ופירות": [
+    "מלפפון",
+    "עגבניה",
+    "גזר",
+    "פלפל אדום",
+    "תפוח עץ",
+    "ענבים ירוקים",
+    "אוכמניות",
+    "מלון",
+    "אגס",
+    "אפרסק",
+    "בננה",
+  ],
+};
+
+function Pills({ items, onRemove }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {items.map((txt) => (
+        <span
+          key={txt}
+          className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700"
+        >
+          {txt}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(txt)}
+              className="rounded-full px-1 text-[10px] opacity-60 hover:opacity-100"
+              aria-label={`הסר ${txt}`}
+            >
+              ✕
+            </button>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function MealPicker({ label, valueList, setValueList }) {
+  const [other, setOther] = useState("");
+  const toggle = (item) =>
+    setValueList((arr) =>
+      arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item]
+    );
+  const remove = (item) => setValueList((arr) => arr.filter((x) => x !== item));
+  const addOther = () => {
+    const clean = other.trim();
+    if (!clean) return;
+    if (!valueList.includes(clean)) setValueList((arr) => [...arr, clean]);
+    setOther("");
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Grid of categories with checkboxes */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {Object.entries(PRESETS).map(([cat, options]) => (
+          <div key={cat} className="rounded-xl border border-slate-200 p-3">
+            <div className="mb-2 text-xs font-semibold text-slate-600">{cat}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {options.map((opt) => (
+                <label key={opt} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300"
+                    checked={valueList.includes(opt)}
+                    onChange={() => toggle(opt)}
+                  />
+                  <span>{opt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Other */}
+      <div className="flex items-center gap-2">
+        <input
+          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+          placeholder="אחר…"
+          value={other}
+          onChange={(e) => setOther(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addOther())}
+        />
+        <button
+          type="button"
+          onClick={addOther}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          הוסף
+        </button>
+        {!!valueList.length && (
+          <button
+            type="button"
+            onClick={() => setValueList([])}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            נקה הכל
+          </button>
+        )}
+      </div>
+
+      <Pills items={valueList} onRemove={remove} />
+
+      {/* Small hint */}
+      <p className="text-xs text-slate-500">
+        נשמור את הבחירה כטקסט בעברית בשדה {label === "ארוחת בוקר" ? "Breakfast" : "Lunch"}.
+      </p>
+    </div>
+  );
+}
+
 export default function CreateReport() {
   const nav = useNavigate();
 
@@ -31,6 +152,10 @@ export default function CreateReport() {
     photos: [],
     notes: "",
   });
+
+  // NEW: selected options for breakfast/lunch
+  const [breakfastSel, setBreakfastSel] = useState([]);
+  const [lunchSel, setLunchSel] = useState([]);
 
   // NEW: files selected but not yet uploaded (they will be uploaded on Save)
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -77,13 +202,19 @@ export default function CreateReport() {
     const base = { child: form.child, date: form.date, notes: form.notes };
 
     try {
-      // 1) Upload any newly selected files first
       const uploaded = await uploadNewPhotosIfAny();
       const photos = [...(form.photos || []), ...uploaded];
 
-      // 2) Send the report payload
       if (form.type === "pre") {
-        const payload = { ...base, meals: form.meals, milkMl: Number(form.milkMl) || 0, photos };
+        // join selected items (Hebrew) into a readable string
+        const breakfastText = breakfastSel.join(", ");
+        const lunchText = lunchSel.join(", ");
+        const payload = {
+          ...base,
+          meals: { breakfast: breakfastText, lunch: lunchText, snack: form.meals.snack },
+          milkMl: Number(form.milkMl) || 0,
+          photos,
+        };
         await mutation.mutateAsync(payload);
       } else {
         const payload = {
@@ -178,33 +309,21 @@ export default function CreateReport() {
 
           {form.type === "pre" ? (
             <>
-              <Section title="Meals">
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <input
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Breakfast"
-                    value={form.meals.breakfast}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, meals: { ...f.meals, breakfast: e.target.value } }))
-                    }
-                  />
-                  <input
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Lunch"
-                    value={form.meals.lunch}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, meals: { ...f.meals, lunch: e.target.value } }))
-                    }
-                  />
-                  <input
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Snack"
-                    value={form.meals.snack}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, meals: { ...f.meals, snack: e.target.value } }))
-                    }
-                  />
-                </div>
+              <Section title="Meals — ארוחת בוקר">
+                <MealPicker label="ארוחת בוקר" valueList={breakfastSel} setValueList={setBreakfastSel} />
+              </Section>
+
+              <Section title="Meals — ארוחת צהריים">
+                <MealPicker label="ארוחת צהריים" valueList={lunchSel} setValueList={setLunchSel} />
+              </Section>
+
+              <Section title="Snack — נשנוש">
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="לדוגמה: יוגורט"
+                  value={form.meals.snack}
+                  onChange={(e) => setForm((f) => ({ ...f, meals: { ...f.meals, snack: e.target.value } }))}
+                />
               </Section>
 
               <Section title="Milk (mL)">
@@ -217,7 +336,7 @@ export default function CreateReport() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, milkMl: Math.max(0, Number(e.target.value || 0)) }))
                   }
-                  placeholder="e.g., 150"
+                  placeholder="למשל: 150"
                 />
               </Section>
             </>
@@ -280,7 +399,6 @@ export default function CreateReport() {
           )}
 
           <Section title="Photos (optional)">
-            {/* Pretty file button */}
             <label
               htmlFor="photos-create"
               className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 active:bg-slate-100"
@@ -299,7 +417,6 @@ export default function CreateReport() {
               className="sr-only"
             />
 
-            {/* Small caption with count / names */}
             {selectedFiles.length > 0 ? (
               <p className="mt-2 text-xs text-slate-600">
                 Selected: {selectedFiles.map((f) => f.name).join(", ")}
@@ -308,7 +425,6 @@ export default function CreateReport() {
               <p className="mt-2 text-xs text-slate-400">No files chosen</p>
             )}
 
-            {/* Existing uploaded photos (thumbnails) */}
             {!!(form.photos || []).length && (
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {(form.photos || []).map((url, i) => (

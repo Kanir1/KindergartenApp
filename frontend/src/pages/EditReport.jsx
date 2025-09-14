@@ -12,6 +12,120 @@ function Section({ title, children }) {
   );
 }
 
+/** same presets as in Create */
+const PRESETS = {
+  פחמימות: ["לחם", "קוסקוס", "פתיתים", "עוגה", "פסטה"],
+  חלבונים: ["ביצה", "טונה", "עוף", "בשר בקר", "גבינה לבנה", "גבינה צהובה", "קוטג׳"],
+  ממרחים: ["חומוס", "טחינה", "טחינה וסילאן", "לבנה", "ממרח תמרים", "ריבה"],
+  "ירקות ופירות": [
+    "מלפפון",
+    "עגבניה",
+    "גזר",
+    "פלפל אדום",
+    "תפוח עץ",
+    "ענבים ירוקים",
+    "אוכמניות",
+    "מלון",
+    "אגס",
+    "אפרסק",
+    "בננה",
+  ],
+};
+
+function Pills({ items, onRemove }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {items.map((txt) => (
+        <span
+          key={txt}
+          className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700"
+        >
+          {txt}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={() => onRemove(txt)}
+              className="rounded-full px-1 text-[10px] opacity-60 hover:opacity-100"
+              aria-label={`הסר ${txt}`}
+            >
+              ✕
+            </button>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function MealPicker({ label, valueList, setValueList }) {
+  const [other, setOther] = useState("");
+  const toggle = (item) =>
+    setValueList((arr) =>
+      arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item]
+    );
+  const remove = (item) => setValueList((arr) => arr.filter((x) => x !== item));
+  const addOther = () => {
+    const clean = other.trim();
+    if (!clean) return;
+    if (!valueList.includes(clean)) setValueList((arr) => [...arr, clean]);
+    setOther("");
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {Object.entries(PRESETS).map(([cat, options]) => (
+          <div key={cat} className="rounded-xl border border-slate-200 p-3">
+            <div className="mb-2 text-xs font-semibold text-slate-600">{cat}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {options.map((opt) => (
+                <label key={opt} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300"
+                    checked={valueList.includes(opt)}
+                    onChange={() => toggle(opt)}
+                  />
+                  <span>{opt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+          placeholder="אחר…"
+          value={other}
+          onChange={(e) => setOther(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addOther())}
+        />
+        <button
+          type="button"
+          onClick={addOther}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          הוסף
+        </button>
+        {!!valueList.length && (
+          <button
+            type="button"
+            onClick={() => setValueList([])}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            נקה הכל
+          </button>
+        )}
+      </div>
+
+      <Pills items={valueList} onRemove={remove} />
+    </div>
+  );
+}
+
 export default function EditReport() {
   const { id } = useParams(); // daily report id
   const nav = useNavigate();
@@ -31,12 +145,23 @@ export default function EditReport() {
     photos: [],
   });
 
+  // NEW: local selections (derived from saved strings)
+  const [breakfastSel, setBreakfastSel] = useState([]);
+  const [lunchSel, setLunchSel] = useState([]);
+
   // NEW: files to upload on Save
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [submitErr, setSubmitErr] = useState("");
 
   useEffect(() => {
     if (!report) return;
+    // parse saved strings into arrays (splitting by comma/•/newline)
+    const split = (s) =>
+      (s || "")
+        .split(/[,•\n]/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+
     setForm({
       meals: {
         breakfast: report?.meals?.breakfast || "",
@@ -44,9 +169,7 @@ export default function EditReport() {
         snack: report?.meals?.snack || "",
       },
       milkMl:
-        typeof report?.milkMl === "number"
-          ? report.milkMl
-          : (report?.hydration?.cups ?? 0) * 200,
+        typeof report?.milkMl === "number" ? report.milkMl : (report?.hydration?.cups ?? 0) * 200,
       sleep: {
         start: report?.sleep?.start ? new Date(report.sleep.start).toISOString().slice(0, 16) : "",
         end: report?.sleep?.end ? new Date(report.sleep.end).toISOString().slice(0, 16) : "",
@@ -56,6 +179,9 @@ export default function EditReport() {
       notes: report?.notes || "",
       photos: report?.photos || [],
     });
+
+    setBreakfastSel(split(report?.meals?.breakfast));
+    setLunchSel(split(report?.meals?.lunch));
   }, [report]);
 
   const computedMinutes = useMemo(() => {
@@ -75,7 +201,6 @@ export default function EditReport() {
     if (!selectedFiles.length) return [];
     const fd = new FormData();
     selectedFiles.forEach((f) => fd.append("photos", f));
-    // If you want foldering by child, we can pass report.child as body param:
     if (report?.child?._id) fd.append("child", report.child._id);
     const res = await api.post("/uploads/photos", fd, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -87,14 +212,23 @@ export default function EditReport() {
     e.preventDefault();
     setSubmitErr("");
     try {
-      // 1) Upload any newly selected files, then merge into photos
       const uploaded = await uploadNewPhotosIfAny();
       const photos = [...(form.photos || []), ...uploaded];
 
-      // 2) Build update payload
       let body = {};
       if (report.type === "preSleep") {
-        body = { meals: form.meals, milkMl: Number(form.milkMl) || 0, notes: form.notes, photos };
+        const breakfastText = breakfastSel.join(", ");
+        const lunchText = lunchSel.join(", ");
+        body = {
+          meals: {
+            breakfast: breakfastText,
+            lunch: lunchText,
+            snack: form.meals.snack,
+          },
+          milkMl: Number(form.milkMl) || 0,
+          notes: form.notes,
+          photos,
+        };
       } else {
         body = {
           sleep: {
@@ -144,33 +278,23 @@ export default function EditReport() {
         <form onSubmit={onSubmit} className="grid grid-cols-1 gap-4">
           {report.type === "preSleep" ? (
             <>
-              <Section title="Meals">
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <input
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Breakfast"
-                    value={form.meals.breakfast}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, meals: { ...f.meals, breakfast: e.target.value } }))
-                    }
-                  />
-                  <input
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Lunch"
-                    value={form.meals.lunch}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, meals: { ...f.meals, lunch: e.target.value } }))
-                    }
-                  />
-                  <input
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Snack"
-                    value={form.meals.snack}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, meals: { ...f.meals, snack: e.target.value } }))
-                    }
-                  />
-                </div>
+              <Section title="Meals — ארוחת בוקר">
+                <MealPicker label="ארוחת בוקר" valueList={breakfastSel} setValueList={setBreakfastSel} />
+              </Section>
+
+              <Section title="Meals — ארוחת צהריים">
+                <MealPicker label="ארוחת צהריים" valueList={lunchSel} setValueList={setLunchSel} />
+              </Section>
+
+              <Section title="Snack — נשנוש">
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  placeholder="לדוגמה: יוגורט"
+                  value={form.meals.snack}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, meals: { ...f.meals, snack: e.target.value } }))
+                  }
+                />
               </Section>
 
               <Section title="Milk (mL)">
@@ -253,7 +377,6 @@ export default function EditReport() {
           </Section>
 
           <Section title="Photos (optional)">
-            {/* Pretty file button */}
             <label
               htmlFor="photos-edit"
               className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 active:bg-slate-100"
