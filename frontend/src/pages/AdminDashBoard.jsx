@@ -1,5 +1,5 @@
 // src/pages/AdminDashBoard.jsx
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 
@@ -29,7 +29,7 @@ function SkeletonCard() {
   return (
     <div className="animate-pulse rounded-2xl border border-slate-200 bg-white p-4">
       <div className="mb-3 h-4 w-2/3 rounded bg-slate-200" />
-      <div className="h-3 w-1/2 rounded bg-slate-200" />
+      <div className="h-3 w-1/2 rounded bg-slate-2 00" />
     </div>
   );
 }
@@ -37,8 +37,12 @@ function SkeletonCard() {
 export default function AdminDashBoard() {
   const { data = [], isLoading, error, isFetching, refetch } = useQuery({
     queryKey: ['children-all'],
-    // Backend now populates parents and derives parentName
     queryFn: async () => (await api.get('/children')).data,
+  });
+
+  const del = useMutation({
+    mutationFn: async (id) => (await api.delete(`/children/${id}`)).data,
+    onSuccess: () => refetch(),
   });
 
   return (
@@ -51,9 +55,7 @@ export default function AdminDashBoard() {
           >
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
-          
 
-          {/* Link/Unlink tool */}
           <Link
             to="/admin/link"
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -61,7 +63,6 @@ export default function AdminDashBoard() {
             Link Parent ↔ Child
           </Link>
 
-          {/* Parents overview */}
           <Link
             to="/admin/parents"
             className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -116,9 +117,8 @@ export default function AdminDashBoard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.map((c) => {
             const idLabel = c.externalId || c.childId || c._id;
-
             const parentLabel =
-              (c.parentName && c.parentName.trim())
+              c.parentName?.trim()
                 ? c.parentName
                 : (Array.isArray(c.parents) && c.parents.length
                     ? `${c.parents.length} parent${c.parents.length > 1 ? 's' : ''}`
@@ -132,12 +132,8 @@ export default function AdminDashBoard() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-base font-semibold text-slate-800">{c.name}</div>
-                    <p className="mt-0.5 truncate text-sm text-slate-500">
-                      Parent: {parentLabel}
-                    </p>
-                    {idLabel && (
-                      <p className="mt-0.5 truncate text-xs text-slate-500">ID: {idLabel}</p>
-                    )}
+                    <p className="mt-0.5 truncate text-sm text-slate-500">Parent: {parentLabel}</p>
+                    {idLabel && <p className="mt-0.5 truncate text-xs text-slate-500">ID: {idLabel}</p>}
                     {c.birthDate && (
                       <p className="mt-0.5 text-xs text-slate-500">
                         Born: {new Date(c.birthDate).toLocaleDateString()}
@@ -154,7 +150,6 @@ export default function AdminDashBoard() {
                   >
                     View Profile
                   </Link>
-                  {/* Pass child in query AND state so ReportsList can pre-filter */}
                   <Link
                     to={`/reports?tab=daily&child=${c._id}`}
                     state={{ child: c._id }}
@@ -162,6 +157,19 @@ export default function AdminDashBoard() {
                   >
                     View Reports
                   </Link>
+
+                  {/* NEW: Delete child (admin-only; backend enforces) */}
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete "${c.name}" and all related reports? This cannot be undone.`)) {
+                        del.mutate(c._id);
+                      }
+                    }}
+                    className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+                    title="Delete child"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             );

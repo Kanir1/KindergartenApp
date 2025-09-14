@@ -8,6 +8,10 @@ const mongoose = require('mongoose');
 const Child = require('../models/child');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
+const tryRequire = (p) => { try { return require(p); } catch { return null; } };
+const DailyReport = tryRequire('../models/DailyReport');   // adjust if your file differs
+const MonthlyReport = tryRequire('../models/MonthlyReport');
+
 // ---------- helpers ----------
 function ownsChildDoc(childDoc, userId) {
   const uid = String(userId);
@@ -182,6 +186,42 @@ router.get('/:id', requireAuth, async (req, res) => {
     return res.status(403).json({ message: 'Forbidden' });
   } catch (e) {
     return res.status(500).json({ message: e.message });
+  }
+});
+
+router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ message: 'Not found' });
+    }
+
+    // Load child (need pickups to clean photos)
+    const child = await Child.findById(id);
+    if (!child) return res.status(404).json({ message: 'Not found' });
+
+    // 1) Delete reports referencing this child (supports either "child" or "childId" field)
+    const filter = { $or: [{ child: id }, { childId: id }] };
+    if (DailyReport) await DailyReport.deleteMany(filter);
+    if (MonthlyReport) await MonthlyReport.deleteMany(filter);
+
+    // 2) Remove pickup photos from disk
+    if (Array.isArray(child.authorizedPickups)) {
+      await Promise.all(
+        child.authorizedPickups.map((p) => {
+          if (!p.photoUrl?.startsWith('/uploads/')) return Promise.resolve();
+          const filePath = path.join(__dirname, '..', p.photoUrl);
+          return fs.promises.unlink(filePath).catch(() => {});
+        })
+      );
+    }
+
+    // 3) Delete the child itself
+    await Child.deleteOne({ _id: id });
+
+    res.json({ message: 'Child and related reports deleted' });
+  } catch (e) {
+    res.status(500).json({ message: e.message });
   }
 });
 
