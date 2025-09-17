@@ -85,13 +85,13 @@ export default function AdminDashBoard() {
             to="/reports/new"
             className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
           >
-            New Daily
+            Create New Daily Report
           </Link>
           <Link
             to="/reports/monthly/new"
             className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
           >
-            New Monthly
+            Create New Monthly Report
           </Link>
         </div>
       </Header>

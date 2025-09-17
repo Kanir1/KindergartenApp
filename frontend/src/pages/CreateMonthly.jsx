@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { toast } from 'sonner';
+import { useSpeechToText } from '../hooks/useSpeechToText'; // <-- NEW
 
 const schema = z.object({
   child: z.string().min(1, 'Child is required'),
@@ -64,13 +65,29 @@ export default function CreateMonthly() {
     formState: { errors, isSubmitting },
     setValue,
     watch,
+    getValues,
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       child: '',
       month: MAX_MONTH, // current YYYY-MM
+      summary: '',
     },
   });
+
+  // --- Speech-to-text (Summary) ---
+  const [sttLang, setSttLang] = useState('he-IL'); // quick toggle HE/EN
+  const { supported, listening, transcript, error, start, stop, setTranscript } =
+    useSpeechToText({ lang: sttLang, interim: true });
+
+  // Append finalized transcript chunks into the Summary field
+  useEffect(() => {
+    if (!transcript) return;
+    const current = getValues('summary') || '';
+    const next = current ? `${current} ${transcript}` : transcript;
+    setValue('summary', next, { shouldDirty: true });
+    setTranscript(''); // clear consumed chunk
+  }, [transcript, getValues, setValue, setTranscript]);
 
   // Clamp month to avoid future months
   const monthVal = watch('month');
@@ -164,8 +181,43 @@ export default function CreateMonthly() {
         <Section title="Overview">
           <div className="grid grid-cols-1 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Summary</label>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-600">Summary</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={sttLang}
+                    onChange={(e) => setSttLang(e.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs"
+                    title="Recognition language"
+                  >
+                    <option value="he-IL">HE</option>
+                    <option value="en-US">EN</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={listening ? stop : start}
+                    disabled={!supported}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                      listening ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white'
+                    } disabled:opacity-50`}
+                    title={supported ? 'Dictate summary' : 'Speech recognition not supported in this browser'}
+                  >
+                    {listening ? 'Stop' : '🎤 Speak'}
+                  </button>
+                </div>
+              </div>
+
               <textarea rows={3} {...register('summary')} className={inputCls} />
+              {!supported && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Speech recognition isn’t supported in this browser. Try Chrome/Edge or iOS Safari 14+.
+                </p>
+              )}
+              {error && (
+                <p className="mt-1 text-xs text-rose-600">
+                  Mic error: {String(error)}
+                </p>
+              )}
             </div>
 
             <div>

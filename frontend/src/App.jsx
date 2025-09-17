@@ -20,6 +20,8 @@ import ParentRegister from './pages/ParentRegister';
 import AdminParentChildLinker from './pages/AdminParentChildLinker';
 import AdminCreateParent from './pages/AdminCreateParent';
 import ChildProfileEdit from './pages/ChildProfileEdit.jsx';
+import EditMonthly from "./pages/EditMonthly";
+import RequiredItems from "./pages/RequiredItems";
 
 const qc = new QueryClient();
 
@@ -34,6 +36,16 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register/parent" element={<ParentRegister />} />
             <Route path="/admin/link" element={<AdminParentChildLinker />} />
+            <Route path="/children/:id/required-items" element={<RequiredItems />} />
+            
+            <Route
+              path="/reports/monthly/:id/edit"
+              element={
+                <Protected role="admin">
+                  <EditMonthly />
+                </Protected>
+              }
+            />
 
             {/* Admin-only: create parent */}
             <Route

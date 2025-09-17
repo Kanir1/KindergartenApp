@@ -36,6 +36,8 @@ app.use('/api/parents', parentsRoutes);         // admin link/unlink children to
 app.use('/api/uploads', require('./routes/uploads'));
 app.use('/api/admin/parents', adminParents);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/required-items', require('./routes/requiredItems'));
+
 
 
 
